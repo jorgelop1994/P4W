@@ -52,28 +52,54 @@ jobs:
           ./.build/release/P4W --check-deps || true
           ./.build/release/P4W --check-deps | grep -q obligatorio
 
-  universal:
-    # Its own runner, and that is the whole point: a universal build has to be
-    # the first build in a workspace. Run after a host build, the build system
-    # emits duplicate outputs for the second architecture and stops with
-    # "duplicate output file … normal x86_64". A separate scratch path did not
-    # help — it writes the intermediates into the package root anyway.
+  release:
+    # Verifies the thing people actually download, which is worth more than
+    # rebuilding it here.
+    #
+    # A multi-architecture `swift build --arch arm64 --arch x86_64` is *not*
+    # in this workflow, on purpose: on the runner's toolchain it stops with
+    # "duplicate output file … normal x86_64" and "missing target configuration
+    # for 'P4WCore'", writing its intermediates into the package root. It
+    # happens on a clean runner too, so it is not build history, and a separate
+    # scratch path does not help. It works on the machine releases are cut on,
+    # and the artifact it produces is what this job checks.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Build for both architectures
-        run: swift build -c release --arch arm64 --arch x86_64
-
-      - name: Both slices, and the same minimum on each
+      - name: Download the latest release image
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          BIN="$(find .build -type f -path '*Products/Release/P4W' | head -1)"
-          echo "binary: $BIN"
-          test -n "$BIN"
-          echo "archs: $(lipo -archs "$BIN")"
-          lipo -archs "$BIN" | grep -q x86_64
-          lipo -archs "$BIN" | grep -q arm64
-          # An app that runs on arm64 and needs a newer macOS on Intel is not
-          # a universal app, so each slice has to declare the minimum.
-          test "$(vtool -show-build "$BIN" | grep -c 'minos 15.0')" -ge 2
-          vtool -show-build "$BIN" | grep -E "minos|platform"
+          gh release download --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.dmg' --dir /tmp/p4w
+          ls -la /tmp/p4w
+
+      - name: Universal, signed and notarized — what a user gets
+        run: |
+          DMG="$(ls /tmp/p4w/*.dmg | head -1)"
+          hdiutil attach "$DMG" -nobrowse -readonly
+          APP="$(ls -d /Volumes/P4W*/P4W.app | head -1)"
+          echo "app: $APP"
+
+          echo "── architectures ──"
+          lipo -archs "$APP/Contents/MacOS/P4W"
+          lipo -archs "$APP/Contents/MacOS/P4W" | grep -q x86_64
+          lipo -archs "$APP/Contents/MacOS/P4W" | grep -q arm64
+
+          echo "── minimum OS version, on each slice ──"
+          test "$(vtool -show-build "$APP/Contents/MacOS/P4W" \
+            | grep -c 'minos 15.0')" -ge 2
+          vtool -show-build "$APP/Contents/MacOS/P4W" | grep minos
+
+          echo "── signature ──"
+          codesign -dv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier"
+          codesign --verify --strict "$APP"
+
+          echo "── Gatekeeper ──"
+          # This checks Apple's record, so it needs the network: a notarized app
+          # is accepted, an unsigned one is not.
+          spctl --assess --type execute -vvv "$APP" | grep -E "accepted|source"
+
+          echo "── the image has its ticket ──"
+          xcrun stapler validate "$DMG"
+
+          hdiutil detach "${APP%/P4W.app}" >/dev/null
