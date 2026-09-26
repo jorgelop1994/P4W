@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Arma el .dmg de P4W: compila universal, ensambla la app y la mete en un disco de sólo lectura.
+#
+# El `.dmg` es lo que hace que la app llegue a otra Mac. Se hace con `hdiutil`, que es la herramienta de
+# macOS: no hay motivo para escribir un formato de disco a mano.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+VERSION="$(grep -m1 CFBundleShortVersionString -A1 scripts/build-app.sh | grep -o '[0-9.]*' | head -1 || echo 0.1.0)"
+STAGE="dist/dmg-stage"
+DMG="dist/P4W-$VERSION.dmg"
+
+echo "→ compilando universal"
+swift build -c release --arch arm64 --arch x86_64 >/dev/null
+
+echo "→ ensamblando la app"
+scripts/build-app.sh --universal >/dev/null
+
+echo "→ armando el disco"
+rm -rf "$STAGE" "$DMG"
+mkdir -p "$STAGE"
+cp -R dist/P4W.app "$STAGE/P4W.app"
+# El atajo a Aplicaciones es lo que hace que arrastrar la app sea el gesto obvio.
+ln -s /Applications "$STAGE/Applications"
+
+# `diskutil image` y no `hdiutil`: las tres operaciones que se usan acá están deprecadas en `hdiutil`
+# (el propio sistema lo avisa al correrlas). Si la herramienta nueva no está, se cae a la vieja.
+if diskutil image create from /dev/null /dev/null >/dev/null 2>&1 || diskutil image create --help >/dev/null 2>&1; then
+  diskutil image create from "$STAGE" "$DMG" --format UDZO --volumeName "P4W" >/dev/null
+else
+  echo "  (diskutil image no está; se usa hdiutil)"
+  hdiutil create -volname "P4W" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+fi
+rm -rf "$STAGE"
+
+echo "→ verificando el disco"
+# El disco se monta de verdad y se mira adentro: que el atajo esté y que el bundle tenga el ícono. Un
+# `.dmg` que "verifica" pero no monta no sirve para nada.
+MOUNT="$(hdiutil attach "$DMG" -nobrowse -readonly 2>/dev/null | grep -o '/Volumes/.*' | head -1)"
+if [[ -n "$MOUNT" ]]; then
+  [[ -L "$MOUNT/Applications" ]] && echo "  ✓ con el atajo a Aplicaciones"
+  [[ -f "$MOUNT/P4W.app/Contents/Resources/P4W.icns" ]] && echo "  ✓ con el ícono adentro"
+  [[ -x "$MOUNT/P4W.app/Contents/MacOS/P4W" ]] && echo "  ✓ con la app ejecutable"
+  hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
+else
+  echo "  ✗ el disco no se pudo montar"; exit 1
+fi
+
+SIZE="$(du -h "$DMG" | cut -f1)"
+echo "→ arquitecturas: $(lipo -archs dist/P4W.app/Contents/MacOS/P4W)"
+echo "✓ listo: $DMG ($SIZE)"

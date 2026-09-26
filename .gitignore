@@ -1,0 +1,13 @@
+# Compilación
+.build/
+dist/
+*.o
+*.dSYM/
+
+# macOS
+.DS_Store
+
+# Nada de credenciales ni sesiones: este repo no debe contener datos del usuario.
+*.jsonl
+settings.json
+auth.json
