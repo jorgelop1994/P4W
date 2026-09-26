@@ -503,7 +503,7 @@ struct CodeBlock: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 Text(language ?? "código")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button {

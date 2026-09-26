@@ -91,7 +91,7 @@ struct CatAvatarView: View {
 
     private var label: some View {
         Text(style == .catWithShortLabel ? state.shortLabel : state.label)
-            .font(.system(size: 10))
+            .font(.system(size: 11))
             .foregroundStyle(.secondary)
             .lineLimit(1)
             // Ancho fijo en el compositor: si el ancho cambiara con cada estado, la barra de escritura se
@@ -228,7 +228,7 @@ struct AvatarHint: View {
             Image(systemName: "hand.tap")
                 .font(.system(size: 9))
             Text("El gato muestra qué está haciendo Pi. Clic en él para moverlo de lugar.")
-                .font(.system(size: 9.5))
+                .font(.system(size: 11))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 4)
             Button {
@@ -261,7 +261,7 @@ struct CatStateLine: View {
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
             Text(state.label)
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 0)

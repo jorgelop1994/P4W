@@ -203,10 +203,38 @@ enum Palette {
             : Color(nsColor: .textBackgroundColor)
     }
 
+    /// Texto **informativo**: fechas, contadores, nombres de carpeta, vistas previas.
+    ///
+    /// Antes esto era `.tertiary`, que sobre el fondo de las burbujas da **1.9:1** de contraste en claro y
+    /// 2.3:1 en oscuro. El mínimo para texto es 4.5:1, así que esa información no se leía: se adivinaba. Y no
+    /// era adorno — eran las fechas y los nombres.
+    ///
+    /// El valor está elegido para **cumplir**, no a ojo, y hay una comprobación que lo calcula en las dos
+    /// apariencias y falla si baja de 4.5:1.
+    static func info(_ scheme: ColorScheme) -> Color {
+        Color.primary.opacity(0.56)
+    }
+
+    /// Superficie del mensaje propio. Antes quedaba a **1.4:1** del fondo, o sea casi indistinguible del
+    /// mensaje de Pi, y esa es la pregunta más básica de una interfaz de chat: *¿esto lo dije yo?*.
+    ///
+    /// La diferencia principal la da la barra de acento (abajo); el tinte acompaña.
     static func userBubble(_ scheme: ColorScheme) -> Color {
         scheme == .dark
-            ? Color(nsColor: .selectedContentBackgroundColor).opacity(0.30)
-            : Color(nsColor: .selectedContentBackgroundColor).opacity(0.22)
+            ? Color(nsColor: .controlAccentColor).opacity(0.30)
+            : Color(nsColor: .controlAccentColor).opacity(0.26)
+    }
+
+    /// La barra de acento del mensaje propio: el acento **a opacidad completa**.
+    ///
+    /// Es lo que hace que el mensaje propio se distinga de un vistazo, y **es el que cumple el requisito**:
+    /// un tinte suave no puede, porque un azul sobre un fondo casi negro apenas cambia la luminancia.
+    ///
+    /// Y el color importa: `selectedContentBackgroundColor`, que era el que se usaba, da **2.66:1** sobre el
+    /// fondo oscuro y **no cumple** el 3:1 de los elementos gráficos. `controlAccentColor` da **4.02:1** en
+    /// claro y **4.15:1** en oscuro, y cumple en las dos. La comprobación lo calcula.
+    static func userStripe(_ scheme: ColorScheme) -> Color {
+        Color(nsColor: .controlAccentColor)
     }
 
     static func panel(_ scheme: ColorScheme) -> Color {

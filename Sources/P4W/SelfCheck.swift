@@ -73,6 +73,7 @@ enum SelfCheck {
         checkDependencies(report)
         checkSidebarSections(report)
         checkUpdateCheck(report)
+        checkLegibility(report)
         if CommandLine.arguments.contains("--live") { checkLiveNaming(report) }
         if CommandLine.arguments.contains("--live") { checkLiveStream(report) }
         checkReveal(report)
@@ -3000,6 +3001,92 @@ enum SelfCheck {
         report.check("y contiene los diez PNG", FileManager.default.fileExists(
             atPath: "\(work)/icon.iconset/icon_512x512@2x.png"))
         report.line("   \(log.last ?? "")")
+    }
+
+    // MARK: 42. Legibilidad y contraste (Fase 10)
+
+    /// Los contrastes, **calculados** en las dos apariencias. Es la parte de la interfaz que no es cuestión
+    /// de gusto: un contraste se mide, y si baja del mínimo se falla.
+    ///
+    /// Se resuelven los colores semánticos del sistema en la apariencia que corresponda y se mezclan sobre el
+    /// fondo real, porque ahí está la trampa: los colores del sistema llevan la suavidad en la **opacidad**, y
+    /// comparar el color puro da un número falso (decía 21:1 donde en pantalla hay 1.9:1).
+    private static func checkLegibility(_ report: Reporter) {
+        report.section("42. Legibilidad y contraste (Fase 10)")
+
+        for dark in [false, true] {
+            let nombre = dark ? "oscuro" : "claro"
+            let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
+            appearance.performAsCurrentDrawingAppearance {
+                let bubble = dark ? NSColor.controlBackgroundColor : NSColor.textBackgroundColor
+                let info = blended(NSColor.labelColor.withAlphaComponent(0.56), over: bubble)
+                let accent = NSColor.controlAccentColor
+                let tint = blended(accent.withAlphaComponent(dark ? 0.30 : 0.26), over: bubble)
+
+                let infoContrast = contrast(info, bubble)
+                report.check("texto informativo en \(nombre): \(String(format: "%.1f", infoContrast)):1",
+                             infoContrast >= 4.5, "el mínimo para texto es 4.5:1")
+
+                // El tinte es **acompañante**, no la señal: un azul sobre un fondo casi negro apenas mueve la
+                // luminancia, así que acá no se puede exigir 3:1. Lo que se exige es que sea perceptible, y el
+                // requisito de los elementos gráficos lo cumple la barra, abajo.
+                let tintContrast = contrast(tint, bubble)
+                report.check("el tinte del mensaje propio se percibe (\(nombre))",
+                             tintContrast >= 1.2,
+                             String(format: "%.1f:1 · acompañante del acento; el 3:1 lo cumple la barra",
+                                    tintContrast))
+
+                let stripeContrast = contrast(accent, bubble)
+                report.check("la barra del mensaje propio cumple el 3:1 de los elementos gráficos (\(nombre))",
+                             stripeContrast >= 3.0, String(format: "%.1f:1", stripeContrast))
+
+                // Y que el texto se lea **sobre el acento de la barra** y sobre el tinte.
+                let onStripe = blended(NSColor.labelColor, over: accent)
+                report.check("el texto se lee sobre el mensaje propio (\(nombre))",
+                             contrast(onStripe, tint) >= 4.5,
+                             String(format: "%.1f:1", contrast(onStripe, tint)))
+            }
+        }
+
+        // La comparación honesta: lo que había antes, para que el número quede registrado.
+        let before = NSAppearance(named: .aqua)!
+        before.performAsCurrentDrawingAppearance {
+            let bubble = NSColor.textBackgroundColor
+            report.line(String(format: "   antes: el texto informativo daba %.1f:1 y el acento del mensaje "
+                                       + "propio %.1f:1 (en oscuro, 2.66:1: no cumplía)",
+                               contrast(blended(.tertiaryLabelColor, over: bubble), bubble),
+                               contrast(.selectedContentBackgroundColor, bubble)))
+        }
+
+        report.check("hay un piso de tamaño para el texto",
+                     SelfCheck.minimumTextSize >= 11, "el piso es \(SelfCheck.minimumTextSize) puntos")
+    }
+
+    /// El piso de tamaño del texto de la interfaz. Chico a propósito como **dato**: hay usos del código que
+    /// tienen que respetarlo, y tenerlo acá permite compararlo.
+    static let minimumTextSize: Double = 11
+
+    static func blended(_ top: NSColor, over bottom: NSColor) -> NSColor {
+        guard let t = top.usingColorSpace(.sRGB), let b = bottom.usingColorSpace(.sRGB) else { return bottom }
+        let a = t.alphaComponent
+        return NSColor(srgbRed: t.redComponent * a + b.redComponent * (1 - a),
+                       green: t.greenComponent * a + b.greenComponent * (1 - a),
+                       blue: t.blueComponent * a + b.blueComponent * (1 - a), alpha: 1)
+    }
+
+    /// El contraste de la WCAG: (L1 + 0.05) / (L2 + 0.05).
+    static func contrast(_ first: NSColor, _ second: NSColor) -> Double {
+        func luminance(_ color: NSColor) -> Double {
+            guard let rgb = color.usingColorSpace(.sRGB) else { return 0 }
+            func channel(_ value: CGFloat) -> Double {
+                let v = Double(value)
+                return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * channel(rgb.redComponent) + 0.7152 * channel(rgb.greenComponent)
+                 + 0.0722 * channel(rgb.blueComponent)
+        }
+        let a = luminance(first), b = luminance(second)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
     }
 
     // MARK: 41. Actualizaciones (Fase 9)

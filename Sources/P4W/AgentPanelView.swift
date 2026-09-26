@@ -13,18 +13,18 @@ struct AgentPanelView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Text("Agentes")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Text("\(model.agents.count) viva\(model.agents.count == 1 ? "" : "s")")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.info(scheme))
 
                 // Lo que te necesita, adelante y en naranja: es la razón de ser de este panel.
                 if model.attentionCount > 0 {
                     HStack(spacing: 3) {
                         Image(systemName: "hand.raised.fill").font(.system(size: 8))
                         Text("\(model.attentionCount) te necesita\(model.attentionCount == 1 ? "" : "n")")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: 11, weight: .medium))
                     }
                     .foregroundStyle(.orange)
                 }
@@ -35,7 +35,7 @@ struct AgentPanelView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "line.3.horizontal.decrease.circle")
                         .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Palette.info(scheme))
                     TextField("filtrar · s:blocked", text: $model.agentFilter)
                         .textFieldStyle(.plain)
                         .font(.system(size: 10))
@@ -47,7 +47,7 @@ struct AgentPanelView: View {
                 .cornerRadius(5)
 
                 Text(totalLine)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
@@ -68,8 +68,8 @@ struct AgentPanelView: View {
                     if model.filteredAgents.isEmpty {
                         Text(model.agentFilter.isEmpty ? "Sin conversaciones vivas"
                                                        : "Nada coincide con «\(model.agentFilter)»")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Palette.info(scheme))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                     }
@@ -106,29 +106,29 @@ struct AgentRow: View {
                 .fill(color)
                 .frame(width: 7, height: 7)
             Text(agent.state.rawValue)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .frame(width: 58, alignment: .leading)
             Text(agent.profileName)
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .frame(width: 86, alignment: .leading)
             Text("pid \(agent.pid)")
-                .font(.system(size: 10, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 74, alignment: .leading)
             Text("propia \(ProcessMetrics.megabytes(agent.footprintBytes))")
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .frame(width: 94, alignment: .leading)
             Text("residente \(ProcessMetrics.megabytes(agent.residentBytes))")
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .frame(width: 112, alignment: .leading)
             Text(String(format: "idle %.0fs", agent.idleSeconds))
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .frame(width: 62, alignment: .leading)
             Text(agent.reapable ? "reciclable" : "en uso")
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(agent.reapable ? .secondary : .primary)
             Spacer(minLength: 0)
         }

@@ -45,7 +45,7 @@ struct RootView: View {
                         .lineLimit(1)
                     if let cwd = model.current?.cwd {
                         Text((cwd as NSString).abbreviatingWithTildeInPath)
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -236,7 +236,7 @@ struct ModelPicker: View {
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                 Text("\(model.models.count)")
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: 170, alignment: .leading)

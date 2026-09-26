@@ -45,7 +45,7 @@ struct SettingsView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "doc.questionmark")
                         .font(.system(size: 22))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Palette.info(scheme))
                     Text("No pude leer el esquema de configuración de Pi")
                         .font(.system(size: 12, weight: .medium))
                     Text("Busqué `docs/settings.md` dentro del paquete de Pi. La configuración sigue en "
@@ -86,14 +86,14 @@ struct SettingsView: View {
                 .font(.system(size: 14, weight: .semibold))
             Text("P4W no tiene configuración propia: esta es la de Pi, en ~/.pi/agent/settings.json. "
                  + "Lo que cambies acá se ve en `pi` de la terminal.")
-                .font(.system(size: 10.5))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let path = model.settingsDocPath {
                 Text("Controles generados desde: \((path as NSString).abbreviatingWithTildeInPath) · "
                      + "\(model.settingsSchema.count) ajustes")
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.info(scheme))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -103,7 +103,7 @@ struct SettingsView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             if let message = model.settingsMessage {
-                Text(message).font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(2)
+                Text(message).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer()
             Button("Recargar") { model.loadSettings() }
@@ -122,7 +122,7 @@ struct SettingsView: View {
         HStack(alignment: .top, spacing: 7) {
             Image(systemName: "info.circle.fill").foregroundStyle(color).font(.system(size: 10))
             Text(text)
-                .font(.system(size: 10.5))
+                .font(.system(size: 11))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
@@ -134,6 +134,7 @@ struct SettingsView: View {
 
 /// Un control por ajuste, elegido por el tipo que declara el documento de Pi.
 struct SettingRow: View {
+    @Environment(\.colorScheme) private var scheme
     let setting: PiSettingsSchema.Setting
     @EnvironmentObject private var model: AppModel
 
@@ -155,8 +156,8 @@ struct SettingRow: View {
             }
             if !setting.help.isEmpty {
                 Text(setting.help)
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.info(scheme))
                     .lineLimit(2)
                     .padding(.leading, 210)
             }
@@ -203,8 +204,8 @@ struct SettingRow: View {
         case .object:
             // Editar objetos anidados campo por campo queda para después: se avisa en vez de mentir.
             Text("objeto — se edita en el archivo")
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 11))
+                .foregroundStyle(Palette.info(scheme))
         }
     }
 }

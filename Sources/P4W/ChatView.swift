@@ -114,7 +114,7 @@ struct ChatView: View {
                                             .font(.system(size: 9, weight: .bold))
                                     }
                                     Text(model.isLoadingOlder ? "Cargando…" : "Cargar mensajes anteriores")
-                                        .font(.system(size: 10.5))
+                                        .font(.system(size: 11))
                                 }
                             }
                             .buttonStyle(.plain)
@@ -225,7 +225,7 @@ struct JumpToBottomButton: View {
                 Image(systemName: "arrow.down")
                     .font(.system(size: 9, weight: .bold))
                 Text("Ir al final")
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
@@ -298,14 +298,15 @@ struct MessageRow: View {
 /// que usan las interfaces de chat buenas — y además están en el menú contextual, que es lo que
 /// espera cualquiera que use macOS.
 struct MessageActions: View {
+    @Environment(\.colorScheme) private var scheme
     let item: ChatItem
     @State private var copied = false
 
     var body: some View {
         HStack(spacing: 8) {
             Text(item.timestamp.formatted(date: .omitted, time: .shortened))
-                .font(.system(size: 9.5))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 11))
+                .foregroundStyle(Palette.info(scheme))
 
             Button {
                 NSPasteboard.general.clearContents()
@@ -319,7 +320,7 @@ struct MessageActions: View {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         .font(.system(size: 9))
                     Text(copied ? "copiado" : "copiar")
-                        .font(.system(size: 9.5))
+                        .font(.system(size: 11))
                 }
             }
             .buttonStyle(.plain)
@@ -359,7 +360,7 @@ struct UserBubble: View {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 9))
                     Text(queued.label)
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
@@ -384,6 +385,15 @@ struct UserBubble: View {
             }
         }
         .background(Palette.userBubble(scheme))
+        // La barra de acento: **es la que hace que el mensaje propio se distinga de un vistazo**. Un tinte
+        // suave no alcanza —sobre un fondo casi negro, un azul apenas mueve la luminancia—, así que la señal
+        // es un objeto gráfico con contraste propio, del lado por el que "sale" el mensaje.
+        .overlay(alignment: .trailing) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Palette.userStripe(scheme))
+                .frame(width: 3)
+                .padding(.vertical, 6)
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Palette.border(scheme, contrast: accessibility.increaseContrast), lineWidth: 1)
@@ -510,7 +520,7 @@ struct ActivityRail: View {
                             .font(.system(size: 9))
                     }
                     Text(summary)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: 11))
                     Spacer(minLength: 0)
                 }
                 .foregroundStyle(.secondary)
@@ -581,7 +591,7 @@ struct ThinkingBubble: View {
                     Image(systemName: "brain")
                         .font(.system(size: 9))
                     Text(streaming ? "pensando… \(text.count) caracteres" : "pensó \(text.count) caracteres")
-                        .font(.system(size: 10.5))
+                        .font(.system(size: 11))
                 }
                 .foregroundStyle(.secondary)
             }
@@ -624,10 +634,10 @@ struct ToolChip: View {
                             .foregroundStyle(tool.isError ? .red : .green)
                     }
                     Text(tool.label)
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                     if !tool.argumentSummary.isEmpty {
                         Text(tool.argumentSummary)
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -643,7 +653,7 @@ struct ToolChip: View {
             if expanded {
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text(tool.output)
-                        .font(.system(size: 10.5, design: .monospaced))
+                        .font(.system(size: 11, design: .monospaced))
                         .textSelection(.enabled)
                         .padding(6)
                         .frame(maxWidth: 560, alignment: .leading)
@@ -667,11 +677,11 @@ struct AttachmentChip: View {
             Image(systemName: attachment.isImage ? "photo" : (attachment.stillExists ? "doc" : "doc.badge.ellipsis"))
                 .font(.system(size: 9))
             Text(attachment.fileName)
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .lineLimit(1)
             if !attachment.isImage && !attachment.stillExists {
                 Text("no encontrado")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.orange)
             }
         }
@@ -736,7 +746,7 @@ struct DialogCard: View {
             if dialog.kind != .confirm {
                 Button("Cancelar") { model.respond(to: dialog, cancelled: true) }
                     .buttonStyle(.plain)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
         }
@@ -784,7 +794,7 @@ struct ExtensionStatusLine: View {
                     Image(systemName: symbol(for: status.key))
                         .font(.system(size: 8))
                     Text(status.text)
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .lineLimit(1)
                 }
                 .foregroundStyle(.secondary)
@@ -811,7 +821,7 @@ struct StatusLine: View {
     var body: some View {
         HStack(spacing: 6) {
             ProgressView().controlSize(.mini)
-            Text(text).font(.system(size: 10.5)).foregroundStyle(.secondary)
+            Text(text).font(.system(size: 11)).foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 22)
@@ -838,13 +848,14 @@ struct ErrorBanner: View {
 
 /// Conversación recién creada: todavía no hay nada en disco, así que no se puede "cargar" nada.
 struct NewConversationPlaceholder: View {
+    @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: "square.and.pencil")
                 .font(.system(size: 24))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Palette.info(scheme))
             Text("Conversación nueva")
                 .font(.system(size: 14, weight: .medium))
             Text("Escribí abajo para empezar. Se guarda sola en el historial de Pi, con el perfil \(model.selectedProfileName).")
@@ -858,13 +869,14 @@ struct NewConversationPlaceholder: View {
 }
 
 struct EmptyStateView: View {
+    @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 28))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Palette.info(scheme))
             Text("Elegí una conversación")
                 .font(.system(size: 14, weight: .medium))
             Text("P4W muestra las conversaciones que Pi ya tiene guardadas en esta máquina, y solo mantiene en memoria las que estás usando.")
@@ -874,8 +886,8 @@ struct EmptyStateView: View {
                 .frame(maxWidth: 400)
             if !model.environmentNote.isEmpty {
                 Text(model.environmentNote)
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Palette.info(scheme))
                     .textSelection(.enabled)
                     .frame(maxWidth: 460)
             }

@@ -18,13 +18,13 @@ struct UpdateNoticeView: View {
                 Image(systemName: "arrow.down.circle")
                     .font(.system(size: 9))
                 Text("Hay una versión nueva: \(update.version)")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                 Button("Descargar") {
                     // Se abre el `.dmg` del release, no una página: un clic en vez de dos.
                     NSWorkspace.shared.open(update.downloadURL)
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Color.accentColor)
                 Spacer(minLength: 4)
                 Button {

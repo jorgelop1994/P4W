@@ -95,8 +95,8 @@ struct SessionListView: View {
                                     CollapseChevron(sectionKey: SidebarSection.project(group.title),
                                                     title: group.title)
                                     Text(group.title)
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.tertiary)
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(Palette.info(scheme))
                                     SectionCount(count: group.sessions.count)
                                     Spacer(minLength: 0)
                                 }
@@ -154,6 +154,7 @@ struct SessionListView: View {
 /// Muestra el **fragmento donde coincide** (lo arma el FTS), no solo el título: buscar sirve para
 /// saber *qué* decía la conversación, y eso vive en el cuerpo.
 struct SearchResultsView: View {
+    @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
@@ -168,7 +169,7 @@ struct SearchResultsView: View {
             VStack(spacing: 4) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Palette.info(scheme))
                 Text("Sin resultados")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
@@ -179,7 +180,7 @@ struct SearchResultsView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     Text("\(model.searchHits.count) resultado\(model.searchHits.count == 1 ? "" : "s")")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 12)
                         .padding(.top, 8)
@@ -209,7 +210,7 @@ struct SearchHitRow: View {
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
                 Text(roleLabel)
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
             }
@@ -264,6 +265,7 @@ struct SearchHitRow: View {
 /// La etiqueta sale de los **términos del propio grupo** ("login, permiso, sesión"): sin modelo, y
 /// explicable. Nada se mueve solo — la sugerencia propone, la persona decide.
 struct SuggestionsSection: View {
+    @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
@@ -274,7 +276,7 @@ struct SuggestionsSection: View {
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
                 Text("SUGERENCIAS")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 SectionCount(count: model.clusterSuggestions.count)
                 Spacer()
@@ -289,7 +291,7 @@ struct SuggestionsSection: View {
                         model.nameClustersWithModel()
                     }
                     .buttonStyle(.plain)
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundStyle(Color.accentColor)
                     .help("Le pide al modelo un nombre por grupo. Uno solo por grupo, y queda guardado: "
                           + "nunca se repite. Si falla, queda la etiqueta del grupo.")
@@ -311,16 +313,16 @@ struct SuggestionsSection: View {
                                 + suggestion.topTerms.joined(separator: ", "))
                     HStack(spacing: 6) {
                         Text(suggestion.summary)
-                            .font(.system(size: 9.5))
-                            .foregroundStyle(.tertiary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Palette.info(scheme))
                         Spacer(minLength: 0)
                         Button("Crear") { model.accept(suggestion) }
                             .buttonStyle(.plain)
-                            .font(.system(size: 9.5, weight: .medium))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Color.accentColor)
                         Button("Ignorar") { model.dismiss(suggestion) }
                             .buttonStyle(.plain)
-                            .font(.system(size: 9.5))
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -341,6 +343,7 @@ struct SuggestionsSection: View {
 /// Es la mitad de arriba del sidebar: la organización propia. Abajo queda el historial con lo que no
 /// está en ningún space, así que cada conversación aparece en un solo lugar y ninguna desaparece.
 struct SpacesSection: View {
+    @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var model: AppModel
 
     /// Si los spaces están plegados enteros. El estado de cada space y de esta sección vive en el store:
@@ -352,7 +355,7 @@ struct SpacesSection: View {
             HStack(spacing: 6) {
                 CollapseChevron(sectionKey: SidebarSection.espacios, title: "Spaces")
                 Text("SPACES")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 SectionCount(count: model.spaces.count)
                 Spacer()
@@ -386,8 +389,8 @@ struct SpacesSection: View {
                     }
                     if model.sessions(inSpace: space).isEmpty {
                         Text("vacío · arrastrá una conversación acá")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Palette.info(scheme))
                             .padding(.leading, 26)
                             .padding(.vertical, 2)
                     }
@@ -419,8 +422,8 @@ struct SpacesSection: View {
                 .lineLimit(1)
 
             Text("\(space.tabs.count)")
-                .font(.system(size: 9))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 11))
+                .foregroundStyle(Palette.info(scheme))
 
             Spacer(minLength: 0)
         }
@@ -525,7 +528,7 @@ struct SessionRow: View {
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Text(session.relativeDate)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             if !session.preview.isEmpty {
@@ -539,8 +542,8 @@ struct SessionRow: View {
                 Text("·")
                 Text(session.previewAuthor == "user" ? "vos" : "pi")
             }
-            .font(.system(size: 9))
-            .foregroundStyle(.tertiary)
+            .font(.system(size: 11))
+            .foregroundStyle(Palette.info(scheme))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)

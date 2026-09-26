@@ -46,11 +46,12 @@ struct CollapseChevron: View {
 /// Está **siempre**, plegada o no. Plegar puede esconder el contenido, nunca la información de que hay
 /// algo: una sección plegada y vacía tiene que verse distinta de una plegada con cosas adentro.
 struct SectionCount: View {
+    @Environment(\.colorScheme) private var scheme
     let count: Int
     var body: some View {
         Text(SidebarContent.countLabel(count))
-            .font(.system(size: 9))
-            .foregroundStyle(.tertiary)
+            .font(.system(size: 11))
+            .foregroundStyle(Palette.info(scheme))
     }
 }
 
@@ -64,7 +65,7 @@ struct SectionTitle: View {
         HStack(spacing: 4) {
             CollapseChevron(sectionKey: sectionKey, title: title)
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
             SectionCount(count: count)
         }

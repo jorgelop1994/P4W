@@ -27,12 +27,12 @@ struct ComposerView: View {
                     Image(systemName: "clock")
                         .font(.system(size: 9))
                     Text(model.workingHint ?? "")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                     Spacer(minLength: 0)
                     if model.hasQueuedMessages {
                         Button("Devolver al editor") { model.dequeue() }
                             .buttonStyle(.plain)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Color.accentColor)
                     }
                 }

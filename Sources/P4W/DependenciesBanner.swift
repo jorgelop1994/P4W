@@ -39,16 +39,16 @@ struct DependenciesBanner: View {
                 Spacer(minLength: 0)
                 Button("Volver a revisar") { model.checkDependencies() }
                     .buttonStyle(.plain)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color.accentColor)
             }
             ForEach(items) { item in
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(item.title): \(item.detail)")
-                        .font(.system(size: 10.5))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     Text(item.fix)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: 11))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -71,7 +71,7 @@ struct DependenciesBanner: View {
             Image(systemName: "info.circle")
                 .font(.system(size: 9))
             Text(items.map { "\($0.title): \($0.detail)" }.joined(separator: " · "))
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .lineLimit(1)
                 .help(items.map { $0.fix }.joined(separator: "\n\n"))
             Spacer(minLength: 4)
