@@ -105,10 +105,10 @@ jobs:
             | grep -E "accepted|Notarized"
 
           echo "── both tickets ──"
-          # The image **and** the app inside it, asked separately. They are two different things, and for a
-          # while the image had one while the app it carried did not: the staging copy was made before
-          # stapling, so the shipped app had no ticket while the script said it had been stapled. Checking
-          # only the image would have kept that hidden.
+          # The image **and** the app inside it, asked separately. Two
+          # different things: for a while the image had a ticket while the
+          # app it carried did not, because the staging copy was made before
+          # stapling. Checking only one of them hides that.
           xcrun stapler validate "$DMG"
           xcrun stapler validate "$APP"
 
