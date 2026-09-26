@@ -8,7 +8,8 @@ on:
 
 jobs:
   build:
-    # macOS 15 es el mínimo declarado en Package.swift: si compila acá, compila en la máquina objetivo.
+    # macOS 15 is the minimum declared in Package.swift: if it builds
+    # here, it builds on the target machine.
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -19,26 +20,45 @@ jobs:
       - name: Build (debug)
         run: swift build
 
-      - name: Build universal (release, arm64 + x86_64)
-        run: swift build -c release --arch arm64 --arch x86_64
-
-      - name: Verify the universal binary
-        run: |
-          BIN=".build/out/Products/Release/P4W"
-          echo "archs: $(lipo -archs "$BIN")"
-          lipo -archs "$BIN" | grep -q x86_64
-          lipo -archs "$BIN" | grep -q arm64
-          vtool -show-build "$BIN" | grep -q "minos 15.0"
+      - name: Build (release, host architecture)
+        run: swift build -c release
 
       - name: Supervisor suite
+        # 27 checks over the process supervisor, including the invariant
+        # that matters: never reap an instance that is busy.
         run: ./.build/release/p4w-supervisor
 
-      - name: Art the cat is drawn in code, so it can be verified here
+      - name: The cat and the icon are code, so they verify here
         run: |
           ./.build/release/P4W --render-cat
           ./.build/release/P4W --render-icon
-          ls -la dist/cat dist/icon
+          ls -la dist/cat/*.png | head -3
+          ls -la dist/icon/P4W.icns
 
-      - name: Dependency check runs and reports
-        # Sin `pi` en el runner: no puede pasar, pero sí tiene que **decir qué falta** en vez de romperse.
-        run: ./.build/release/P4W --check-deps || true
+      - name: Dependency check reports instead of breaking
+        # There is no `pi` on a runner. The point is that the check
+        # *says what is missing* rather than failing.
+        run: |
+          ./.build/release/P4W --check-deps || true
+          ./.build/release/P4W --check-deps | grep -q obligatorio
+
+      - name: Build universal (arm64 + x86_64) and verify slices
+        # A separate scratch path, and it is not cosmetic: mixing
+        # `swift build` with `swift build --arch …` in one build
+        # directory makes the build system emit duplicate outputs for the
+        # second architecture and fail with "duplicate output file".
+        # It happened.
+        run: |
+          swift build -c release --arch arm64 --arch x86_64 \
+            --scratch-path .build-universal
+          BIN="$(find .build-universal -type f \
+            -path '*Products/Release/P4W' | head -1)"
+          echo "binary: $BIN"
+          test -n "$BIN"
+          echo "archs: $(lipo -archs "$BIN")"
+          lipo -archs "$BIN" | grep -q x86_64
+          lipo -archs "$BIN" | grep -q arm64
+          # Both slices must declare the same minimum: an app that runs
+          # on arm64 and needs a newer macOS on Intel is not universal.
+          test "$(vtool -show-build "$BIN" | grep -c 'minos 15.0')" -ge 2
+          vtool -show-build "$BIN" | grep -E "minos|platform"
