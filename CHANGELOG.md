@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Planned
+- **Automatic replacement** — installing the update instead of downloading it. It will use Sparkle, not a
+  hand-written updater: verifying signatures and replacing a running binary atomically is not something to
+  write yourself.
+- **Code comments in English.** The UI stays in Spanish; the comments are being translated as the project
+  goes public.
+
+## [0.2.0] - 2026-09-26
+
 ### Added
 - **Update notices, without a server of our own.** The app asks GitHub for the latest release and, when
   there is a newer one, says so above the composer with a button that downloads the image:
@@ -22,12 +31,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The version now lives in **one place** (`P4WVersion.current`); the build script reads it from there instead
   of keeping its own copy in the `Info.plist` template.
 
-### Planned
-- **Automatic replacement** — installing the update instead of downloading it. It will use Sparkle, not a
-  hand-written updater: verifying signatures and replacing a running binary atomically is not something to
-  write yourself.
-- **Code comments in English.** The UI stays in Spanish; the comments are being translated as the project
-  goes public.
+### Fixed
+- **The notarization order.** The app's ticket was being stapled *before* notarizing it, when the ticket does
+  not exist yet, and the failure was swallowed by a `|| true`. The app shipped without its own ticket, which
+  only matters on a machine that is offline the first time — and the image is now built from the stapled app,
+  then notarized and stapled itself.
+- **The CI.** It failed on GitHub for three reasons of mine: mixing `swift build` with
+  `swift build --arch …` in one build directory (the build system then emits duplicate outputs), running the
+  supervisor suite where there is no `pi` to launch, and piping `spctl` without `2>&1` — it writes its
+  verdict to standard error, so the check failed while the log showed it had passed.
+- **`1.0` and `1.0.0` were equal for ordering but not for `==`**, because the synthesised equality compares
+  the number arrays. It would have shown up as being told twice about the same version.
 
 ## [0.1.0] - 2026-09-25
 
@@ -86,5 +100,6 @@ First public release. Everything below is in it.
 | Warm start | 30 ms |
 | Topic clustering | 315 ms for 470 conversations |
 
-[Unreleased]: https://github.com/jorgelop1994/P4W/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jorgelop1994/P4W/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jorgelop1994/P4W/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jorgelop1994/P4W/releases/tag/v0.1.0
