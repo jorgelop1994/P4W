@@ -40,6 +40,8 @@ if [[ ! -f dist/icon/P4W.icns ]]; then
 fi
 [[ -f dist/icon/P4W.icns ]] && cp dist/icon/P4W.icns "$APP/Contents/Resources/P4W.icns"
 
+VERSION="$(grep -o 'current = "[0-9.]*"' Sources/P4WCore/Version.swift | grep -o '[0-9.]*' | head -1 || echo 0.0.0)"
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -51,7 +53,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key>           <string>dev.p4w.app</string>
     <key>CFBundlePackageType</key>          <string>APPL</string>
     <key>CFBundleIconFile</key>             <string>P4W</string>
-    <key>CFBundleShortVersionString</key>   <string>0.1.0</string>
+    <key>CFBundleShortVersionString</key>   <string>VERSION_PLACEHOLDER</string>
     <key>CFBundleVersion</key>              <string>1</string>
     <key>LSMinimumSystemVersion</key>       <string>15.0</string>
     <key>NSHighResolutionCapable</key>      <true/>
@@ -60,6 +62,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+# La versión sale del código, no del script: una sola fuente para el `Info.plist` y para el aviso de
+# actualizaciones.
+sed -i '' "s/VERSION_PLACEHOLDER/$VERSION/" "$APP/Contents/Info.plist"
 
 # ── Firma ─────────────────────────────────────────────────────────────────────────────────────────
 # Con **Developer ID Application** en el llavero, la app se firma para distribuir (runtime endurecido y

@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-VERSION="$(grep -m1 CFBundleShortVersionString -A1 scripts/build-app.sh | grep -o '[0-9.]*' | head -1 || echo 0.1.0)"
+VERSION="$(grep -o 'current = "[0-9.]*"' Sources/P4WCore/Version.swift | grep -o '[0-9.]*' | head -1)"
 STAGE="dist/dmg-stage"
 DMG="dist/P4W-$VERSION.dmg"
 

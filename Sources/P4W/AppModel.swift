@@ -296,6 +296,9 @@ final class AppModel: ObservableObject {
 
     func loadSessions() {
         checkDependencies()
+        // Una consulta por arranque como máximo, y solo si pasó un día desde la última: la regla vive en el
+        // núcleo y se verifica ahí.
+        checkForUpdates()
         let root = SessionCatalog.defaultRoot
         let index = self.index
 
@@ -682,6 +685,78 @@ final class AppModel: ObservableObject {
         let nowCollapsed = !isCollapsed(sectionKey)
         try? spacesStore?.setCollapsed(nowCollapsed, section: sectionKey)
         objectWillChange.send()
+    }
+
+    // MARK: Actualizaciones
+
+    /// El último resultado de la consulta. `nil` = todavía no se consultó.
+    @Published var updateOutcome: UpdateCheck.Outcome?
+    @Published var isCheckingUpdates = false
+
+    var currentVersion: ReleaseVersion? { P4WVersion.release }
+
+    private var lastUpdateCheck: Date? {
+        get {
+            guard let raw = preferences?.string(.lastUpdateCheck), let seconds = Double(raw) else {
+                return nil
+            }
+            return Date(timeIntervalSince1970: seconds)
+        }
+        set {
+            try? preferences?.set(newValue.map { String($0.timeIntervalSince1970) },
+                                 for: .lastUpdateCheck)
+        }
+    }
+
+    private var dismissedUpdateVersion: String? { preferences?.string(.dismissedUpdateVersion) }
+
+    var availableUpdate: UpdateInfo? { updateOutcome?.update }
+
+    /// Si corresponde mostrar el aviso. Las reglas están en el núcleo, no acá: son una decisión, y así se
+    /// verifican sin abrir la app.
+    var showsUpdateNotice: Bool {
+        UpdateNotice.shouldShow(outcome: updateOutcome,
+                                dismissedVersion: dismissedUpdateVersion,
+                                piIsWorking: instance?.isRunActive ?? false)
+    }
+
+    func dismissUpdate() {
+        guard let version = availableUpdate?.version else { return }
+        try? preferences?.set(version.description, for: .dismissedUpdateVersion)
+        objectWillChange.send()
+    }
+
+    /// Consulta si hay una versión nueva.
+    ///
+    /// - Parameter force: la consulta a mano (desde el menú). Ignora la regla de una por día y **siempre
+    ///   responde algo**: al día, hay una nueva, o no se pudo consultar. Una búsqueda manual que no dice
+    ///   nada deja la duda.
+    func checkForUpdates(force: Bool = false) {
+        guard let current = currentVersion else { return }
+        if !force, !UpdateCheck.shouldCheck(lastCheck: lastUpdateCheck) { return }
+        if isCheckingUpdates { return }
+        lastUpdateCheck = Date()
+        isCheckingUpdates = true
+        if force { statusNote = "Buscando actualizaciones…" }
+
+        Task.detached(priority: .utility) {
+            let outcome = await UpdateCheck.latest(current: current)
+            await MainActor.run {
+                self.isCheckingUpdates = false
+                self.updateOutcome = outcome
+                // Solo la consulta a mano escribe en la línea de estado: la automática no interrumpe.
+                if force {
+                    switch outcome {
+                    case .upToDate(let version):
+                        self.statusNote = "Ya estás en la última versión (\(version))."
+                    case .available(let info):
+                        self.statusNote = "Hay una versión nueva: \(info.version)."
+                    case .unknown(let reason):
+                        self.statusNote = "No se pudo consultar: \(reason)"
+                    }
+                }
+            }
+        }
     }
 
     // MARK: Dependencias

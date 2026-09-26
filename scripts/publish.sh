@@ -34,7 +34,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-VERSION="$(grep -o '<string>[0-9][0-9.]*</string>' scripts/build-app.sh | head -1 | grep -o '[0-9][0-9.]*')"
+VERSION="$(grep -o 'current = "[0-9.]*"' Sources/P4WCore/Version.swift | grep -o '[0-9.]*' | head -1)"
 [[ -n "$VERSION" ]] || { echo "✗ no pude leer la versión de scripts/build-app.sh"; exit 1; }
 
 # Allowlist, not a denylist: what is not listed here does not get published, and a new file has to be

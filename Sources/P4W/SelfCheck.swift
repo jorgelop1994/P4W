@@ -72,6 +72,7 @@ enum SelfCheck {
         checkIcon(report)
         checkDependencies(report)
         checkSidebarSections(report)
+        checkUpdateCheck(report)
         if CommandLine.arguments.contains("--live") { checkLiveNaming(report) }
         if CommandLine.arguments.contains("--live") { checkLiveStream(report) }
         checkReveal(report)
@@ -3001,6 +3002,103 @@ enum SelfCheck {
         report.line("   \(log.last ?? "")")
     }
 
+    // MARK: 41. Actualizaciones (Fase 9)
+
+    /// Lo que puede fallar en un aviso de versión nueva: **comparar texto en vez de números** (y decir que
+    /// `0.9.0` es más nueva que `0.10.0`), ofrecer una beta sin querer, o romperse cuando la consulta falla.
+    private static func checkUpdateCheck(_ report: Reporter) {
+        report.section("41. Avisos de actualización (Fase 9)")
+
+        // ── La comparación, que es donde se equivoca todo el mundo ────────────
+        func version(_ text: String) -> ReleaseVersion? { ReleaseVersion(text) }
+
+        report.check("lee «v0.1.0» y «0.1.0» igual",
+                     version("v0.1.0") == version("0.1.0"), version("v0.1.0")?.description ?? "?")
+        report.check("«1.0» y «1.0.0» son la misma versión",
+                     version("1.0") == version("1.0.0"),
+                     "\(version("1.0")?.description ?? "?") contra \(version("1.0.0")?.description ?? "?")")
+        report.check("**0.10.0 es más nueva que 0.9.0** (el error clásico del texto)",
+                     (version("0.10.0")! > version("0.9.0")!), "comparando texto daría lo contrario")
+        report.check("0.2.0 es más nueva que 0.1.9", version("0.2.0")! > version("0.1.9")!)
+        report.check("una versión no es más nueva que sí misma", !(version("0.1.0")! > version("0.1.0")!))
+        report.check("1.0 es más nueva que 0.9.9", version("1.0")! > version("0.9.9")!)
+        report.check("no se rompe con basura", version("no-version") == nil)
+        report.check("ni con algo vacío", version("") == nil)
+        report.check("pero sí lee una sola cifra", version("2") != nil)
+        report.check("reconoce una previa", version("0.2.0-beta.1")?.isPrerelease == true)
+        report.check("y una estable no lo es", version("0.2.0")?.isPrerelease == false)
+
+        let current = version("0.1.0")!
+
+        // ── La respuesta de GitHub, con respuestas guardadas ──────────────────
+        // Nunca contra internet: así la verificación no depende de que hoy exista un release nuevo.
+        func decode(_ json: String) -> UpdateCheck.Outcome {
+            UpdateCheck.decode(Data(json.utf8), current: current)
+        }
+
+        let available = decode("""
+        {"tag_name": "v0.2.0", "name": "P4W 0.2.0", "html_url": "https://github.com/x/y/releases/tag/v0.2.0",
+         "assets": [{"name": "P4W-0.2.0.dmg", "browser_download_url": "https://github.com/x/y/dl/P4W-0.2.0.dmg"}]}
+        """)
+        report.check("con una versión nueva, la ofrece", available.update?.version.description == "0.2.0")
+        report.check("y ofrece el .dmg, no la página",
+                     available.update?.downloadURL.absoluteString.hasSuffix(".dmg") == true,
+                     available.update?.downloadURL.lastPathComponent ?? "?")
+        report.check("con la misma versión, no dice nada",
+                     decode("{\"tag_name\": \"v0.1.0\"}") == .upToDate(current: current))
+        report.check("con una versión más vieja, tampoco (no se baja nunca)",
+                     decode("{\"tag_name\": \"v0.0.9\"}") == .upToDate(current: current))
+        report.check("y con una beta publicada, tampoco: nadie quiere una beta que no pidió",
+                     decode("{\"tag_name\": \"v0.2.0-beta\"}") == .upToDate(current: current))
+
+        // ── Y falla abierto: lo que no se puede saber, no se muestra ──────────
+        let broken = [ "esto no es json", "{}", "{\"tag_name\": \"v-rara\"}",
+                       "{\"tag_name\": \"v9.9.9\"}" ]   // sin assets ni html_url: no hay qué descargar
+        report.check("una respuesta ilegible no rompe: devuelve «no sé»",
+                     decode("esto no es json").update == nil)
+        report.check("y sin nada que descargar tampoco ofrece",
+                     decode("{\"tag_name\": \"v9.9.9\"}").update == nil)
+        report.check("«no sé» nunca se muestra como si hubiera novedad",
+                     broken.allSatisfy { decode($0).update == nil })
+        report.check("pero la página del release alcanza cuando no hay .dmg",
+                     decode("{\"tag_name\": \"v0.2.0\", \"html_url\": \"https://github.com/x/y\"}")
+                        .update?.downloadURL.absoluteString == "https://github.com/x/y")
+
+        // ── Las reglas del aviso, juntas ──────────────────────────────────────
+        let update = available.update
+        report.check("se muestra cuando hay novedad y Pi está quieto",
+                     UpdateNotice.shouldShow(outcome: available, dismissedVersion: nil, piIsWorking: false))
+        report.check("**no se muestra mientras Pi trabaja**",
+                     !UpdateNotice.shouldShow(outcome: available, dismissedVersion: nil, piIsWorking: true))
+        report.check("ni cuando no hay nada nuevo",
+                     !UpdateNotice.shouldShow(outcome: .upToDate(current: current),
+                                              dismissedVersion: nil, piIsWorking: false))
+        report.check("ni cuando no se pudo consultar",
+                     !UpdateNotice.shouldShow(outcome: .unknown(reason: "sin internet"),
+                                              dismissedVersion: nil, piIsWorking: false))
+        report.check("descartar esa versión la silencia",
+                     !UpdateNotice.shouldShow(outcome: available, dismissedVersion: "0.2.0",
+                                              piIsWorking: false))
+        report.check("pero una versión **más nueva** vuelve a avisar",
+                     UpdateNotice.shouldShow(outcome: available, dismissedVersion: "0.2.0" ,
+                                             piIsWorking: false) == false
+                     && UpdateNotice.shouldShow(
+                        outcome: .available(UpdateInfo(
+                            version: ReleaseVersion("0.3.0")!,
+                            downloadURL: update!.downloadURL)),
+                        dismissedVersion: "0.2.0", piIsWorking: false),
+                     "descartar la 0.2.0 no puede silenciar la 0.3.0")
+
+        // ── Y una consulta por día, no más ────────────────────────────────────
+        report.check("la primera vez consulta", UpdateCheck.shouldCheck(lastCheck: nil))
+        report.check("una hora después no vuelve a consultar",
+                     !UpdateCheck.shouldCheck(lastCheck: Date().addingTimeInterval(-3600)))
+        report.check("un día después sí",
+                     UpdateCheck.shouldCheck(lastCheck: Date().addingTimeInterval(-25 * 3600)))
+        report.check("el repositorio es el público", UpdateCheck.repository.contains("P4W"),
+                     UpdateCheck.latestReleaseURL.absoluteString)
+    }
+
     // MARK: 40. Secciones plegables (Fase 8)
 
     /// Lo que puede fallar al plegar: que plegar no saque las filas (y entonces no sirva para nada), que el
@@ -3170,6 +3268,34 @@ enum SelfCheck {
                      DependencyCheck.providerNames(root: work).isEmpty
                      || !DependencyCheck.providerNames(root: work).contains { $0.contains("key") },
                      "solo se leen claves de diccionario, nunca valores")
+    }
+
+    /// `P4W --check-updates`: consulta de verdad y sale. Es la forma de verificar el aviso sin abrir la app.
+    static func printUpdates() {
+        guard let current = P4WVersion.release else {
+            print("no pude leer la versión propia (\(P4WVersion.current))")
+            exit(1)
+        }
+        print("P4W \(current) · consultando \(UpdateCheck.repository)…")
+        let semaphore = DispatchSemaphore(value: 0)
+        var outcome: UpdateCheck.Outcome = .unknown(reason: "sin respuesta")
+        Task {
+            outcome = await UpdateCheck.latest(current: current)
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 20)
+        switch outcome {
+        case .upToDate(let version):
+            print("✓ estás en la última versión (\(version))")
+        case .available(let info):
+            print("↑ hay una versión nueva: \(info.version)")
+            print("  descarga: \(info.downloadURL)")
+        case .unknown(let reason):
+            // Falla abierto: en la app esto no se muestra. Acá se imprime porque es una herramienta.
+            print("· no se pudo consultar: \(reason)")
+            print("  (en la app esto no se muestra: un aviso opcional nunca puede ser un error)")
+        }
+        exit(0)
     }
 
     /// `P4W --check-deps`: imprime el chequeo y sale. Es la forma de verificarlo sin abrir la app.

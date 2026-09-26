@@ -41,6 +41,9 @@ struct ChatView: View {
             // El aviso de dependencias va arriba de todo lo demás: si falta `pi`, es lo primero que hay
             // que ver y nada de lo de abajo tiene sentido todavía.
             DependenciesBanner()
+            // El aviso de versión nueva, con las mismas reglas que el de dependencias: se ve una vez, no
+            // bloquea, y no aparece mientras Pi trabaja.
+            UpdateNoticeView()
             // El gato va justo arriba del compositor: es lo último que se mira antes de escribir, y ahí su
             // estado es el que importa. En la canaleta no se dibuja acá — pero **la etiqueta sí**: el gato
             // nunca puede quedar siendo la única señal. En la barra lateral no va ninguna de las dos.

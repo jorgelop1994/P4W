@@ -38,6 +38,11 @@ public final class PreferencesStore: @unchecked Sendable {
         case dockIconLive = "dock_icon_live"
         /// Avisos de dependencias que ya se descartaron (los opcionales y los recomendados).
         case dismissedDependencies = "dismissed_dependencies"
+        /// La versión de la que ya se avisó y se descartó. Se guarda la **versión**, no un "no mostrar
+        /// más", porque descartar la 0.2.0 no puede silenciar la 0.3.0.
+        case dismissedUpdateVersion = "dismissed_update_version"
+        /// Cuándo se consultó por última vez, para no golpear la API: una vez por día alcanza.
+        case lastUpdateCheck = "last_update_check"
     }
 
     private let path: String

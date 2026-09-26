@@ -7,11 +7,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Update notices, without a server of our own.** The app asks GitHub for the latest release and, when
+  there is a newer one, says so above the composer with a button that downloads the image:
+  - It shows **only when there is something new**. "Up to date" and "could not check" are never shown:
+    there is nothing to do with that information, and an optional notice must not become an error.
+  - It **never appears while Pi is working** — that is the moment you are waiting for something else.
+  - Dismissing it remembers **that version**. A newer one notifies again.
+  - One check per day at most, and `Check for Updates…` in the application menu, which always answers
+    something.
+  - Version comparison is numeric, so `0.10.0` is newer than `0.9.0` — comparing text gets that backwards,
+    and it has its own checks. A published pre-release is never offered.
+  - `P4W --check-updates` does the same from a terminal.
+- The version now lives in **one place** (`P4WVersion.current`); the build script reads it from there instead
+  of keeping its own copy in the `Info.plist` template.
+
 ### Planned
-- **Update notifications** — the app will notice when a newer release exists and say so, without a server of
-  its own: GitHub Releases for the binaries, an appcast for the feed, and no forced installs. Automatic
-  replacement will use Sparkle rather than a hand-written updater, because verifying signatures and
-  replacing a running binary atomically is not something to write yourself.
+- **Automatic replacement** — installing the update instead of downloading it. It will use Sparkle, not a
+  hand-written updater: verifying signatures and replacing a running binary atomically is not something to
+  write yourself.
 - **Code comments in English.** The UI stays in Spanish; the comments are being translated as the project
   goes public.
 

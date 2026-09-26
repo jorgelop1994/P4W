@@ -16,6 +16,9 @@ enum P4WMain {
         if CommandLine.arguments.contains("--render-cat") {
             SelfCheck.renderCat()
         }
+        if CommandLine.arguments.contains("--check-updates") {
+            SelfCheck.printUpdates()
+        }
         if CommandLine.arguments.contains("--check-deps") {
             SelfCheck.printDependencies()
         }
@@ -55,6 +58,12 @@ struct P4WApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1100, height: 720)
         .commands {
+            // En el menú de la app, que es donde macOS lo pone en todas las aplicaciones. Y responde
+            // **siempre algo**: al día, hay una nueva, o no se pudo consultar.
+            CommandGroup(after: .appInfo) {
+                Button("Buscar actualizaciones…") { model.checkForUpdates(force: true) }
+                    .disabled(model.isCheckingUpdates)
+            }
             CommandGroup(replacing: .newItem) {
                 Button("Nueva conversación") { model.newConversation() }
                     .keyboardShortcut("n", modifiers: .command)
