@@ -1,0 +1,5 @@
+# Canales de financiamiento que muestra el botón «Sponsor» del repositorio.
+#
+# Solo los que se usan: GitHub ignora las claves vacías, y dejar plataformas que no existen es ruido para
+# quien mira.
+github: [jorgelop1994]

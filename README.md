@@ -190,6 +190,16 @@ milestone.
 
 ---
 
+## Support
+
+P4W is free software and it stays that way: GPL-3.0 means you can use it, read it, change it and share it.
+If it saves you time and you feel like it, you can
+[sponsor the work](https://github.com/sponsors/jorgelop1994).
+
+That money has one concrete destination: the **Apple Developer membership, 99 USD a year**. It is what signs
+and notarizes the app, which is the difference between opening with a double click and walking somebody
+through a right-click dance the first time they run it.
+
 ## License
 
 **GNU General Public License v3.0.** Copyright © 2026 Jorge.
