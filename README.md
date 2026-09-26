@@ -1,9 +1,11 @@
 # P4W
 
 **A native macOS GUI for [Pi](https://pi.dev), the AI coding agent.** Universal binary (arm64 + x86_64),
-macOS 15 (Sequoia) or newer, **zero dependencies** — no Electron, no Tauri, no web view.
+macOS 15 (Sequoia) or newer, **zero dependencies** — no Electron, no Tauri, no web view. Signed with a
+**Developer ID and notarized by Apple**, so it opens with a double click.
 
 ![CI](https://github.com/jorgelop1994/P4W/actions/workflows/ci.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/jorgelop1994/P4W)
 ![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black)
 ![Universal](https://img.shields.io/badge/binary-arm64%20%2B%20x86__64-green)
@@ -75,12 +77,15 @@ through a login shell. That only matters for `~/.zshrc`-style setups, but when i
 1. Download `P4W-<version>.dmg` from [Releases](../../releases).
 2. Open it and drag **P4W** into **Applications**.
 
-> **macOS will say it can't verify the developer.** The app is not notarized by Apple (that needs a paid
-> Developer ID), so the first launch is blocked by Gatekeeper. To open it: **right-click the app → Open →
-> Open**. You only do this once. After that it launches normally.
->
-> If you'd rather not: the whole thing builds from source in one command (`swift build -c release`) and the
-> only thing it needs is Swift 6.
+The build is signed with a Developer ID and notarized by Apple, so Gatekeeper lets it through: drag it to
+Applications, double click, done.
+
+And you do not have to take my word for it. Check it yourself:
+
+```bash
+spctl --assess --type execute -vvv /Applications/P4W.app   # → accepted, source=Notarized Developer ID
+xcrun stapler validate /Applications/P4W.app               # → the validate action worked
+```
 
 ---
 
@@ -177,7 +182,7 @@ These are the ones that shaped the code. The long form, in Spanish, lives in the
 | 4 · Spaces, tabs, agent panel, notifications | ✅ |
 | 5 · Topic clustering | ✅ |
 | 6 · The cat | ✅ |
-| 7 · Polish (dmg, icons, dependency notices) | 🔄 nearly done |
+| 7 · Polish — signed and notarized builds, app icon, dependency notices | ✅ |
 | 8 · Collapsible sidebar sections | ✅ |
 | 9 · Updates without a server of our own | 📋 planned |
 
@@ -185,8 +190,8 @@ These are the ones that shaped the code. The long form, in Spanish, lives in the
 comments are being moved to English as the project goes public.
 
 Not yet verified: P4W has **never been run on an Intel Mac**. The binary is universal and its minimum OS
-version checks out on both architectures (`minos 15.0`), but verified is not tested. That is the next real
-milestone.
+version checks out on both architectures (`minos 15.0`), but verified is not tested. That is the one part of
+7 that cannot be closed from the machine it was written on — and the next real milestone.
 
 ---
 

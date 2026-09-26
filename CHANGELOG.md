@@ -56,7 +56,8 @@ First public release. Everything below is in it.
 
 - **Universal binary** (arm64 + x86_64), minimum macOS 15.0, verified on both architectures.
 - **The user interface is in Spanish.** The project was written for a Spanish-speaking household.
-- **The app is not notarized**, so the first launch needs right-click → Open. See the README.
+- **The app is signed with a Developer ID and notarized by Apple** ("Ready for distribution"), and the disk
+  image has its ticket stapled. It opens with a double click.
 - **Never run on an Intel Mac.** The binary is universal and both architectures report `minos 15.0`, but
   verified is not tested.
 
