@@ -52,23 +52,28 @@ jobs:
           ./.build/release/P4W --check-deps || true
           ./.build/release/P4W --check-deps | grep -q obligatorio
 
-      - name: Build universal (arm64 + x86_64) and verify slices
-        # A separate scratch path, and it is not cosmetic: mixing
-        # `swift build` with `swift build --arch …` in one build
-        # directory makes the build system emit duplicate outputs for the
-        # second architecture and fail with "duplicate output file".
-        # It happened.
+  universal:
+    # Its own runner, and that is the whole point: a universal build has to be
+    # the first build in a workspace. Run after a host build, the build system
+    # emits duplicate outputs for the second architecture and stops with
+    # "duplicate output file … normal x86_64". A separate scratch path did not
+    # help — it writes the intermediates into the package root anyway.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build for both architectures
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Both slices, and the same minimum on each
         run: |
-          swift build -c release --arch arm64 --arch x86_64 \
-            --scratch-path .build-universal
-          BIN="$(find .build-universal -type f \
-            -path '*Products/Release/P4W' | head -1)"
+          BIN="$(find .build -type f -path '*Products/Release/P4W' | head -1)"
           echo "binary: $BIN"
           test -n "$BIN"
           echo "archs: $(lipo -archs "$BIN")"
           lipo -archs "$BIN" | grep -q x86_64
           lipo -archs "$BIN" | grep -q arm64
-          # Both slices must declare the same minimum: an app that runs
-          # on arm64 and needs a newer macOS on Intel is not universal.
+          # An app that runs on arm64 and needs a newer macOS on Intel is not
+          # a universal app, so each slice has to declare the minimum.
           test "$(vtool -show-build "$BIN" | grep -c 'minos 15.0')" -ge 2
           vtool -show-build "$BIN" | grep -E "minos|platform"
