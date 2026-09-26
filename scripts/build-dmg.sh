@@ -32,7 +32,6 @@ else
   echo "  (diskutil image no está; se usa hdiutil)"
   hdiutil create -volname "P4W" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 fi
-rm -rf "$STAGE"
 
 echo "→ verificando el disco"
 # El disco se monta de verdad y se mira adentro: que el atajo esté y que el bundle tenga el ícono. Un
@@ -57,6 +56,20 @@ DEVELOPER_ID="$(security find-identity -v -p codesigning 2>/dev/null \
   | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)"
 PROFILE="${P4W_NOTARY_PROFILE:-p4w}"
 
+# Notariza un artefacto y devuelve si Apple lo aceptó.
+#
+# Sin cañería a propósito: `comando | grep -q patrón` con `set -o pipefail` da un falso negativo, porque
+# `grep -q` corta apenas encuentra, el otro proceso muere por el corte y el resultado se reporta como fallo.
+# Pasó: el registro de Apple decía «Accepted» y el script decía que no.
+notarize() {
+  local path="$1" out
+  out="$(xcrun notarytool submit "$path" --keychain-profile "$PROFILE" --wait 2>&1 || true)"
+  case "$out" in
+    *"status: Accepted"*) return 0 ;;
+    *) echo "$out" | tail -3 | sed 's/^/     /'; return 1 ;;
+  esac
+}
+
 if [[ -n "$DEVELOPER_ID" ]] && xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; then
   echo "→ notarizando (perfil: $PROFILE)"
 
@@ -68,17 +81,35 @@ if [[ -n "$DEVELOPER_ID" ]] && xcrun notarytool history --keychain-profile "$PRO
   # Así la app abre aunque la copien a una máquina sin conexión, y el disco también.
   ZIP="$(mktemp -d)/P4W.zip"
   ditto -c -k --sequesterRsrc --keepParent dist/P4W.app "$ZIP"
-  if xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait 2>&1 | grep -q "status: Accepted"; then
-    xcrun stapler staple dist/P4W.app >/dev/null 2>&1 && echo "  ✓ app notarizada y con el ticket engrapado"
-    rm -f "$DMG" && hdiutil create -volname "P4W" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null 2>&1
-    if xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait 2>&1 | grep -q "status: Accepted"; then
-      xcrun stapler staple "$DMG" >/dev/null 2>&1 && echo "  ✓ disco notarizado y engrapado"
+  if notarize "$ZIP"; then
+    if [[ "$(xcrun stapler staple dist/P4W.app 2>&1 || true)" == *worked* ]]; then
+      echo "  ✓ app notarizada y con el ticket engrapado"
+    else
+      echo "  ✗ la app no se pudo engrapar: el disco sirve, pero no sin conexión"
+    fi
+    # El disco se rehace **desde la app ya sellada**. Y si falla, se dice: la primera versión de este bloque
+    # reconstruía el disco desde un directorio que ya se había borrado, `hdiutil` fallaba en silencio y el
+    # disco salía con la app sin ticket. Se publicó una versión así.
+    rm -f "$DMG"
+    if hdiutil create -volname "P4W" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null 2>&1; then
+      echo "  ✓ disco rearmado, con la app sellada adentro"
+    else
+      echo "  ✗ no se pudo rearmar el disco: se publica el anterior, con la app sin ticket"
+    fi
+    if notarize "$DMG"; then
+      if [[ "$(xcrun stapler staple "$DMG" 2>&1 || true)" == *worked* ]]; then
+        echo "  ✓ disco notarizado y engrapado"
+      else
+        echo "  ✗ el disco se notarizó pero no se pudo engrapar"
+      fi
     else
       echo "  ⚠️ el disco no llegó a Accepted (la app sí: se puede distribuir igual)"
     fi
   else
     echo "  ✗ la notarización de la app no fue aceptada"
   fi
+
+  rm -rf "$STAGE"
 
   # La comprobación que vale es **sobre la app**, no sobre el disco: `spctl --type open` sobre un `.dmg`
   # devuelve "rejected" aunque el disco esté notarizado y engrapado (pasó, y dio una falsa alarma).
