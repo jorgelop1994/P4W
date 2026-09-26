@@ -20,7 +20,8 @@ scripts/build-app.sh --universal >/dev/null
 echo "→ armando el disco"
 rm -rf "$STAGE" "$DMG"
 mkdir -p "$STAGE"
-cp -R dist/P4W.app "$STAGE/P4W.app"
+# `ditto` y no `cp -R`: preserva los atributos y todo lo que el bundle lleve adentro.
+ditto dist/P4W.app "$STAGE/P4W.app"
 # El atajo a Aplicaciones es lo que hace que arrastrar la app sea el gesto obvio.
 ln -s /Applications "$STAGE/Applications"
 
@@ -87,9 +88,13 @@ if [[ -n "$DEVELOPER_ID" ]] && xcrun notarytool history --keychain-profile "$PRO
     else
       echo "  ✗ la app no se pudo engrapar: el disco sirve, pero no sin conexión"
     fi
-    # El disco se rehace **desde la app ya sellada**. Y si falla, se dice: la primera versión de este bloque
-    # reconstruía el disco desde un directorio que ya se había borrado, `hdiutil` fallaba en silencio y el
-    # disco salía con la app sin ticket. Se publicó una versión así.
+    # El disco se rehace desde la app ya sellada, y esto es lo que faltaba: **el ticket se engrapa adentro
+    # del bundle**, y la copia del directorio de armado se había hecho antes de engrapar. Reconstruir el
+    # disco con esa copia vieja dejaba adentro una app sin ticket, mientras el script decía que había
+    # quedado sellada. Se copia de nuevo, después de engrapar.
+    rm -rf "$STAGE/P4W.app"
+    ditto dist/P4W.app "$STAGE/P4W.app"
+
     rm -f "$DMG"
     if hdiutil create -volname "P4W" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null 2>&1; then
       echo "  ✓ disco rearmado, con la app sellada adentro"
