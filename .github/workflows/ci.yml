@@ -23,10 +23,20 @@ jobs:
       - name: Build (release, host architecture)
         run: swift build -c release
 
-      - name: Supervisor suite
-        # 27 checks over the process supervisor, including the invariant
-        # that matters: never reap an instance that is busy.
-        run: ./.build/release/p4w-supervisor
+      - name: Supervisor suite (needs a real Pi install)
+        # 27 checks over the process supervisor, including the invariant that
+        # matters: never reap an instance that is busy. It launches a real
+        # `pi`, so it cannot run where there is none — and the honest move is
+        # to say so instead of skipping silently or failing for a reason that
+        # is not a defect.
+        run: |
+          if command -v pi >/dev/null 2>&1; then
+            ./.build/release/p4w-supervisor
+          else
+            echo "No pi on this machine."
+            echo "The supervisor suite launches a real one, so it is skipped."
+            echo "It runs locally, together with --self-check."
+          fi
 
       - name: The cat and the icon are code, so they verify here
         run: |
