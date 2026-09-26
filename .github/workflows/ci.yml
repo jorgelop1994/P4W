@@ -97,7 +97,12 @@ jobs:
           echo "── Gatekeeper ──"
           # This checks Apple's record, so it needs the network: a notarized app
           # is accepted, an unsigned one is not.
-          spctl --assess --type execute -vvv "$APP" | grep -E "accepted|source"
+          #
+          # `2>&1` is not decoration: `spctl` writes its verdict to standard
+          # error, so without merging the pipes `grep` sees nothing, exits 1,
+          # and the step fails while the log above shows it was accepted.
+          spctl --assess --type execute -vvv "$APP" 2>&1 \
+            | grep -E "accepted|Notarized"
 
           echo "── the image has its ticket ──"
           xcrun stapler validate "$DMG"
