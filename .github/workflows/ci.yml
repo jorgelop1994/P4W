@@ -104,7 +104,12 @@ jobs:
           spctl --assess --type execute -vvv "$APP" 2>&1 \
             | grep -E "accepted|Notarized"
 
-          echo "── the image has its ticket ──"
+          echo "── both tickets ──"
+          # The image **and** the app inside it, asked separately. They are two different things, and for a
+          # while the image had one while the app it carried did not: the staging copy was made before
+          # stapling, so the shipped app had no ticket while the script said it had been stapled. Checking
+          # only the image would have kept that hidden.
           xcrun stapler validate "$DMG"
+          xcrun stapler validate "$APP"
 
           hdiutil detach "${APP%/P4W.app}" >/dev/null
