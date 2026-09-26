@@ -48,5 +48,37 @@ else
 fi
 
 SIZE="$(du -h "$DMG" | cut -f1)"
+# ── Notarización ──────────────────────────────────────────────────────────────────────────────────
+# Se hace **solo si se puede**: hace falta una identidad de Developer ID y un perfil de credenciales en el
+# llavero (`xcrun notarytool store-credentials p4w`). Sin eso, el disco se arma igual y el README explica el
+# clic derecho → Abrir. Un `.dmg` sin notarizar no es un error: es una versión que funciona con un paso más
+# la primera vez.
+DEVELOPER_ID="$(security find-identity -v -p codesigning 2>/dev/null \
+  | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)"
+PROFILE="${P4W_NOTARY_PROFILE:-p4w}"
+
+if [[ -n "$DEVELOPER_ID" ]] && xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; then
+  echo "→ notarizando (perfil: $PROFILE)"
+  # Se engrapa el ticket en la app **antes** de armar el disco, y después en el disco: así la app abra
+  # aunque el disco se copie sin conexión, y el disco abra aunque la app se copie sin conexión.
+  xcrun stapler staple dist/P4W.app >/dev/null 2>&1 || true
+  if xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait 2>&1 | grep -q "status: Accepted"; then
+    xcrun stapler staple "$DMG" >/dev/null 2>&1 || true
+    echo "  ✓ notarizado y engrapado"
+  else
+    echo "  ✗ la notarización no fue aceptada (el disco queda sin notarizar)"
+  fi
+  spctl --assess --type open --context context:primary-signature "$DMG" >/dev/null 2>&1 \
+    && echo "  ✓ Gatekeeper lo acepta" || echo "  ⚠️ Gatekeeper todavía no lo acepta"
+elif [[ -n "$DEVELOPER_ID" ]]; then
+  echo "  (hay Developer ID pero no hay perfil de notarización: corré"
+  echo "     xcrun notarytool store-credentials $PROFILE --apple-id TU_APPLE_ID --team-id TU_TEAM_ID"
+  echo "   y sacá el Team ID de acá — es el campo organizationalUnitName, y **no** el número"
+  echo "   entre paréntesis del nombre del certificado, que es el identificador del certificado:"
+  echo "     security find-certificate -c \"Apple Development\" -p | openssl x509 -noout -subject -nameopt multiline)"
+else
+  echo "  (sin Developer ID: el disco va sin notarizar — el README explica el clic derecho → Abrir)"
+fi
+
 echo "→ arquitecturas: $(lipo -archs dist/P4W.app/Contents/MacOS/P4W)"
 echo "✓ listo: $DMG ($SIZE)"

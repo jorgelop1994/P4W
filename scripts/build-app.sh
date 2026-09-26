@@ -61,8 +61,29 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# Firma ad-hoc: alcanza para correr localmente y para que macOS trate la app como app.
-codesign --force --sign - "$APP" >/dev/null 2>&1 || echo "  (sin firma; se puede correr igual)"
+# ── Firma ─────────────────────────────────────────────────────────────────────────────────────────
+# Con **Developer ID Application** en el llavero, la app se firma para distribuir (runtime endurecido y
+# marca de tiempo, que es lo que exige la notarización). Sin esa identidad, se firma ad-hoc: alcanza para
+# correrla en esta máquina y el README explica el clic derecho → Abrir.
+#
+# La identidad se **busca**, no se escribe: así el día que Jorge cree el certificado, la misma orden empieza
+# a firmar bien sin tocar nada. Es la diferencia entre preparar el camino y documentarlo.
+DEVELOPER_ID="$(security find-identity -v -p codesigning 2>/dev/null   | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)"
+
+if [[ -n "$DEVELOPER_ID" ]]; then
+  echo "→ firmando con: $DEVELOPER_ID"
+  # Adentro primero el ejecutable, después el bundle: `--deep` está deprecado y firma en el orden que no es.
+  codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID" \
+    "$APP/Contents/MacOS/P4W" >/dev/null 2>&1 || echo "  (no se pudo firmar el ejecutable)"
+  codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID" "$APP" \
+    >/dev/null 2>&1 || echo "  (no se pudo firmar el bundle)"
+  codesign --verify --strict "$APP" >/dev/null 2>&1 && echo "  ✓ firma válida y verificada" \
+    || echo "  ⚠️ la firma no verifica"
+else
+  codesign --force --sign - "$APP" >/dev/null 2>&1 \
+    || echo "  (sin firma; se puede correr igual)"
+  echo "  (ad-hoc: sin Developer ID en el llavero — el README explica el clic derecho → Abrir)"
+fi
 
 echo "→ ícono:         $([[ -f "$APP/Contents/Resources/P4W.icns" ]] && echo sí || echo no)"
 echo "→ arquitecturas: $(lipo -archs "$APP/Contents/MacOS/P4W")"
