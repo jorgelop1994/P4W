@@ -227,6 +227,14 @@ struct CatAvatarView: View {
             }
         }
         Divider()
+        Button {
+            model.saveDiagnostics()
+        } label: {
+            Text("Guardar diagnóstico…")
+        }
+        .help("Escribe en Descargas lo que hizo P4W en los últimos minutos, para poder mandarlo. "
+              + "No incluye el texto de ninguna conversación.")
+        Divider()
         Text("El gato muestra qué está haciendo Pi")
     }
 }

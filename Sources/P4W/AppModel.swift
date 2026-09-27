@@ -413,6 +413,11 @@ final class AppModel: ObservableObject {
         pendingConversationKey = nil
         switchDraft(to: summary.path)
         current = summary
+        // **La pregunta que ya falló tres veces**: ¿de qué conversación es esto? Se comprueba acá, con la
+        // referencia **ya derivada** de lo que se acaba de poner como visible.
+        Log.check(ConsistencyCheck.open(reference: currentRef?.key, visible: current?.path),
+                  reference: currentRef?.key, visible: current?.path, instancia: nil)
+        Log.record(.conversacionAbierta, [(.clave, .key(currentRef?.key)), (.conteo, .number(0))])
         // Sin esto, después de crear una conversación nueva el placeholder seguía tapando todo:
         // abrir cualquier conversación parecía no cargar nada.
         isNewConversation = false
@@ -486,6 +491,7 @@ final class AppModel: ObservableObject {
         // nace cuando se envía el primer mensaje (`ensureInstance`), fuera del hilo principal. Antes
         // esto adquiría en el hilo principal y la ventana se congelaba al crear una conversación.
         pendingConversationKey = newKey
+        Log.record(.conversacionNueva, [(.clave, .key(newKey))])
         pinnedKey = newKey
         applyPinning()
         currentModel = nil
@@ -561,6 +567,13 @@ final class AppModel: ObservableObject {
     /// Ya no recibe ni guarda la referencia: se deriva de `current`. Guardarla era tener dos verdades sobre
     /// lo mismo, y una de las dos quedaba vieja.
     private func bind(_ instance: ManagedInstance, key: String?) {
+        // **La instancia que se engancha tiene que ser la de la conversación visible.** Si es la de otra
+        // —aunque esté viva a propósito, por el multitasking—, sus eventos se dibujarían en la que se está
+        // mirando. Eso es la mezcla de mensajes, y esto lo detecta.
+        Log.check(ConsistencyCheck.bind(reference: currentRef?.key,
+                                        visible: current?.path ?? key,
+                                        instancia: instance.poolKey),
+                  reference: currentRef?.key, visible: current?.path ?? key, instancia: instance.poolKey)
         self.instance = instance
         if let key {
             pinnedKey = key
@@ -696,6 +709,14 @@ final class AppModel: ObservableObject {
             : (requested == .followUp ? .followUp : .steering)
 
         isNewConversation = false
+        // **Acá, antes de agregar nada.** Es el punto exacto del bug que reportó Jorge: con una conversación
+        // abierta en pantalla y la referencia en nil, el mensaje no se podía mandar; y con una referencia que
+        // no era la de esa conversación, se iba a otra. Una violación queda registrada como `fault`.
+        Log.check(ConsistencyCheck.send(reference: currentRef?.key,
+                                        visible: current?.path,
+                                        instancia: instance?.poolKey),
+                  reference: currentRef?.key, visible: current?.path, instancia: instance?.poolKey)
+        Log.record(.envioPedido, [(.clave, .key(currentRef?.key)), (.largo, .number(text.count))])
         transcript.appendUser(text: text, attachments: attachments, queued: queued)
         // El borrador **no se borra acá**: se olvida cuando el texto ya está en la conversación. Si el envío
         // falla, tiene que poder volver; y si la app se cierra en el medio, tampoco puede perderse.
@@ -738,6 +759,8 @@ final class AppModel: ObservableObject {
             return nil
         }
         await MainActor.run { self.statusNote = "Despertando la conversación…" }
+        // El supervisor ya lleva sus propias líneas al adquirir; acá solo se deja dicho que fue por un envío.
+        Log.record(.instanciaAdquirida, [(.clave, .key(ref.key)), (.tipo, .word("despertar"))])
         let profile = await MainActor.run { self.selectedProfile }
         let revived = try? await Task.detached(priority: .userInitiated) {
             try supervisor.acquire(ref, profile: profile)
@@ -926,6 +949,14 @@ final class AppModel: ObservableObject {
 
         Task.detached(priority: .utility) {
             let outcome = await UpdateCheck.latest(current: current)
+            switch outcome {
+            case .unknown(let razón):
+                // No saberlo no es un error para la persona, pero sí para el registro: si algún día la
+                // consulta deja de funcionar, esto lo dice.
+                Log.record(.actualizacionFallo, [(.motivo, .word(razón.isEmpty ? "consulta" : "sin_datos"))])
+            case .upToDate, .available:
+                Log.record(.actualizacionConsultada, [(.version, .word(current.description))])
+            }
             await MainActor.run {
                 self.isCheckingUpdates = false
                 self.updateOutcome = outcome
@@ -1063,6 +1094,8 @@ final class AppModel: ObservableObject {
     func checkNotificationPermission() {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             let denied = settings.authorizationStatus == .denied
+            // Es un dato que la persona podría necesitar mandar: el sonido no suena y no se sabe por qué.
+            Log.record(.permisoAvisos, [(.permiso, .word(denied ? "apagado" : "concedido"))])
             Task { @MainActor in self.notificationsDenied = denied }
         }
     }
@@ -1087,6 +1120,42 @@ final class AppModel: ObservableObject {
     /// conversaciones vivas, tenga o no la suya en pantalla, y por eso no cuesta memoria.
     func sessionState(_ key: String) -> InstanceState? {
         agents.first { $0.sessionKey == key }?.state
+    }
+
+    /// El resumen del entorno que encabeza un diagnóstico: **versiones, conteos y resultados**, nunca contenido.
+    /// Es lo que hace que un archivo de registros sirva para entender algo en vez de ser una lista de líneas.
+    var diagnosticEnvironment: String {
+        var lineas: [String] = []
+        lineas.append("app: P4W \(P4WVersion.current)")
+        lineas.append("sistema: macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+        lineas.append("motor: pi (por RPC) · perfil: \(selectedProfile.name)")
+        if let modelo = currentModel {
+            lineas.append("modelo: \(modelo.provider)/\(modelo.id)")
+        }
+        lineas.append("conversaciones: \(sessions.count) · spaces: \(spaces.count) · instancias vivas: \(agents.count)")
+        lineas.append("índice: \((try? index?.count()) ?? 0) conversaciones")
+        lineas.append("avisos: \(notificationsDenied ? "apagados en macOS" : "activos") · sonido: \(alertsWithSound ? "sí" : "no")")
+        lineas.append("dependencias faltantes: \(visibleDependencyIssues.count)")
+        return lineas.joined(separator: "\n")
+    }
+
+    /// Guarda el diagnóstico en Descargas y lo muestra en el Finder.
+    ///
+    /// Va a **Descargas** y no a un panel de guardado a propósito: es una acción de auxilio, cuando ya algo
+    /// salió mal, y lo que se quiere es encontrar el archivo, no elegir dónde ponerlo.
+    func saveDiagnostics() {
+        let formato = DateFormatter()
+        formato.dateFormat = "yyyy-MM-dd-HHmm"
+        let descargas = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser
+        let url = descargas.appendingPathComponent("p4w-diagnostico-\(formato.string(from: Date())).txt")
+        do {
+            try LogDump.write(minutes: 15, entorno: diagnosticEnvironment, to: url)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+            statusNote = "Diagnóstico guardado en Descargas."
+        } catch {
+            lastError = "No pude guardar el diagnóstico."
+        }
     }
 
     /// Dónde vive el gato. Se cambia desde el menú del propio gato, sin entrar a configuración: es una
@@ -1132,7 +1201,12 @@ final class AppModel: ObservableObject {
             // Se agrupa si el resultado guardado quedó viejo (no solo si no hay ninguno): si aparecieron
             // conversaciones nuevas o cambió el umbral, hay que rehacerlo.
             if (try? ClusterIndexer.needsRebuild(index: index, threshold: threshold)) == true {
+                let arranque = Date()
                 _ = try? ClusterIndexer.rebuild(index: index, threshold: threshold)
+                Log.record(.indiceReconstruido, [
+                    (.conteo, .number((try? index.count()) ?? 0)),
+                    (.milisegundos, .ms(Int(Date().timeIntervalSince(arranque) * 1000))),
+                ])
             }
             let clusters = (try? index.loadClusters()) ?? []
             var members: [Int: [String]] = [:]
@@ -1408,6 +1482,9 @@ final class AppModel: ObservableObject {
         guard let store = spacesStore else { return }
         do {
             let removed = try store.pruneTabs { FileManager.default.fileExists(atPath: $0) }
+            if removed > 0 {
+                Log.record(.spacesPodados, [(.conteo, .number(removed))])
+            }
             if removed > 0 {
                 refreshSpaces()
                 statusNote = "Saqué \(removed) pestaña(s) de conversaciones que ya no están."
@@ -1758,6 +1835,7 @@ final class AppModel: ObservableObject {
                                                            appIsActive: active,
                                                            alreadyNotified: notified.contains(mark)) {
                     notified.insert(mark)
+                    Log.record(.avisoEmitido, [(.clave, .key(agent.sessionKey)), (.tipo, .word("te necesita"))])
                     Notifier.post(title: NotificationPolicy.title(for: .needsYou),
                                   body: describe(agent.sessionKey),
                                   sound: true)
@@ -1780,6 +1858,7 @@ final class AppModel: ObservableObject {
                                                        appIsActive: active,
                                                        alreadyNotified: notified.contains(mark)) {
                 notified.insert(mark)
+                Log.record(.avisoEmitido, [(.clave, .key(change.sessionKey)), (.tipo, .word("terminó"))])
                 Notifier.post(title: NotificationPolicy.title(for: .finished),
                               body: describe(change.sessionKey),
                               sound: alertsWithSound)

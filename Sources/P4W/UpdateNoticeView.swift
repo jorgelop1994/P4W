@@ -17,7 +17,9 @@ struct UpdateNoticeView: View {
             HStack(spacing: 5) {
                 Image(systemName: "arrow.down.circle")
                     .font(.system(size: 9))
-                Text("Hay una versión nueva: \(update.version)")
+                // El texto se arma **antes** de entrar al `Text` localizado: interpolar un tipo propio ahí
+                // produce un aviso del compilador, y el aviso tiene razón.
+                Text("Hay una versión nueva: " + update.version.description)
                     .font(.system(size: 11))
                 Button("Descargar") {
                     // Se abre el `.dmg` del release, no una página: un clic en vez de dos.
@@ -34,7 +36,8 @@ struct UpdateNoticeView: View {
                         .font(.system(size: 8, weight: .bold))
                 }
                 .buttonStyle(.plain)
-                .help("No avisar más de la \(update.version). Una versión más nueva sí va a avisar.")
+                .help("No avisar más de la " + update.version.description
+                      + ". Una versión más nueva sí va a avisar.")
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, 22)

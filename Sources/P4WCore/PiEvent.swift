@@ -98,6 +98,45 @@ public struct DialogRequest: Sendable, Equatable {
 /// `.other(type:)` en vez de romper el parser. Pi agrega eventos con el tiempo y P4W no
 /// debe caerse cuando eso pase.
 public enum PiEvent: Sendable {
+    /// El **nombre del tipo** de evento, sin ningún dato adentro.
+    ///
+    /// Es lo que permite registrar que algo pasó sin registrar el algo: el log dice `rpc.evento tipo=tool_call`
+    /// y nunca toca el contenido. El `switch` es exhaustivo, así que agregar un evento nuevo **obliga** a
+    /// nombrarlo — no se puede olvidar.
+    public var kindName: String {
+        switch self {
+        case .messageStart: return "message_start"
+        case .delta: return "delta"
+        case .blockEnd: return "block_end"
+        case .messageEnd: return "message_end"
+        case .toolCallStarted: return "tool_call_started"
+        case .toolCallArguments: return "tool_call_arguments"
+        case .toolCallCompleted: return "tool_call_completed"
+        case .toolInput: return "tool_input"
+        case .toolExecutionStart: return "tool_execution_start"
+        case .toolExecutionUpdate: return "tool_execution_update"
+        case .toolExecutionEnd: return "tool_execution_end"
+        case .turnStart: return "turn_start"
+        case .turnEnd: return "turn_end"
+        case .agentStart: return "agent_start"
+        case .agentEnd: return "agent_end"
+        case .agentSettled: return "agent_settled"
+        case .thinkingLevelChanged: return "thinking_level_changed"
+        case .sessionInfoChanged: return "session_info_changed"
+        case .compactionStart: return "compaction_start"
+        case .compactionEnd: return "compaction_end"
+        case .retryStarted: return "retry_started"
+        case .retryFinished: return "retry_finished"
+        case .extensionError: return "extension_error"
+        case .queueChanged: return "queue_changed"
+        case .uiDialog: return "ui_dialog"
+        case .uiNotice: return "ui_notice"
+        case .uiDialogResolved: return "ui_dialog_resolved"
+        case .bashExecutionOutput: return "bash_execution_output"
+        case .other: return "other"
+        }
+    }
+
     case messageStart(role: String?)
     case delta(ContentDelta, usage: TokenUsage?)
     case blockEnd(ContentBlockEnd)

@@ -78,6 +78,9 @@ enum SelfCheck {
         checkMultitasking(report)
         checkSpaceMembership(report)
         checkInProgressIndicator(report)
+        checkLogPolicy(report)
+        checkConsistency(report)
+        checkLogDump(report)
         if CommandLine.arguments.contains("--live") { checkLiveNaming(report) }
         if CommandLine.arguments.contains("--live") { checkLiveStream(report) }
         checkReveal(report)
@@ -3017,6 +3020,189 @@ enum SelfCheck {
         report.line("   \(log.last ?? "")")
     }
 
+    // MARK: 49. Sacar el registro del Mac (Fase 15.4)
+
+    /// Cuántos minutos pide `--logs`. Se lee acá para poder verificarlo: un argumento inventado no puede
+    /// cambiar lo que se vuelca.
+    static func logMinutes(from arguments: [String]) -> Int? {
+        guard let indice = arguments.firstIndex(of: "--logs") else { return nil }
+        let siguiente = arguments.count > indice + 1 ? arguments[indice + 1] : nil
+        guard let valor = siguiente, let minutos = Int(valor), minutos > 0 else { return 15 }
+        return min(minutos, 240)   // techo: nadie necesita un día de registro en la terminal
+    }
+
+    /// Vuelca los registros a la terminal y termina.
+    static func printLogs(minutes: Int) {
+        let lineas = LogDump.recent(minutes: minutes)
+        if lineas.isEmpty {
+            print("No hay registros de los últimos \(minutes) minutos.")
+        } else {
+            for linea in lineas { print(linea.text) }
+            print("— \(lineas.count) líneas · últimos \(minutes) minutos · subsistema \(Log.subsystem)")
+        }
+        exit(0)
+    }
+
+    /// El volcado: que los minutos se lean bien y que no se pueda pedir cualquier barbaridad.
+    private static func checkLogDump(_ report: Reporter) {
+        report.section("49. Sacar el registro del Mac (Fase 15.4)")
+        report.check("sin el flag no se vuelca nada", logMinutes(from: ["P4W"]) == nil)
+        report.check("`--logs` sin número usa 15 minutos", logMinutes(from: ["P4W", "--logs"]) == 15)
+        report.check("`--logs 30` usa 30", logMinutes(from: ["P4W", "--logs", "30"]) == 30)
+        report.check("un número inventado no rompe: cae en 15",
+                     logMinutes(from: ["P4W", "--logs", "muchísimos"]) == 15)
+        report.check("`--logs 0` no es válido: cae en 15", logMinutes(from: ["P4W", "--logs", "0"]) == 15)
+        // El techo: nadie necesita volcar días de registro, y el volcado tiene que poder terminar siempre.
+        report.check("y hay un techo: `--logs 99999` se recorta a 240",
+                     logMinutes(from: ["P4W", "--logs", "99999"]) == 240)
+
+        // El volcado real: tiene que poder correr y **no traer contenido**. Se comprueba que las líneas que
+        // salen sean de nuestro subsistema y que el encabezado diga lo que es.
+        let lineas = LogDump.recent(minutes: 5, limit: 50)
+        report.check("el volcado corre y devuelve algo legible",
+                     lineas.allSatisfy { !$0.category.isEmpty }, "\(lineas.count) líneas en 5 minutos")
+        let texto = LogDump.text(minutes: 1, limit: 10, entorno: "app: P4W")
+        report.check("el encabezado aclara que no hay contenido",
+                     texto.contains("No incluye el texto de ninguna conversación"))
+        report.check("y el volcado respeta el techo de líneas",
+                     LogDump.recent(minutes: 240, limit: 1).count <= 1)
+
+        // El archivo de diagnóstico, **escrito y leído de verdad**: es lo que la persona va a mandar, así que
+        // tiene que existir, tener encabezado y no llevar contenido.
+        let trabajo = "\(NSTemporaryDirectory())p4w-diag-\(UUID().uuidString.prefix(8))"
+        try? FileManager.default.createDirectory(atPath: trabajo, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: trabajo) }
+        let destino = URL(fileURLWithPath: "\(trabajo)/diagnostico.txt")
+        do {
+            try LogDump.write(minutes: 1, entorno: "app: P4W 0.2.0\nsistema: macOS", to: destino)
+            let leido = (try? String(contentsOf: destino, encoding: .utf8)) ?? ""
+            report.check("el diagnóstico se escribe y se lee", leido.contains("P4W — diagnóstico"))
+            report.check("y lleva el resumen del entorno", leido.contains("app: P4W 0.2.0"))
+            report.check("y avisa que no lleva contenido",
+                         leido.contains("No incluye el texto de ninguna conversación"))
+            let tamano = (try? FileManager.default.attributesOfItem(atPath: destino.path)[.size] as? Int) ?? 0
+            report.check("y es un archivo de tamaño razonable, no un volcado sin fin",
+                         (tamano ?? 0) < 2_000_000, "\((tamano ?? 0) / 1024) KB")
+        } catch {
+            report.check("el diagnóstico se escribe y se lee", false, "\(error)")
+        }
+    }
+
+    // MARK: 47. El registro: la tabla y el redactor (Fase 15.1)
+
+    /// Lo que se puede verificar de un sistema de logs sin mirar logs: que **esté completo**, que los niveles
+    /// sean los que tienen que ser, y sobre todo que **no se filtre contenido**.
+    private static func checkLogPolicy(_ report: Reporter) {
+        report.section("47. El registro: la tabla, los niveles y el redactor (Fase 15.1)")
+
+        // Un evento sin fila se registraría como fault en vez de callarse, pero igual es un bug: nadie decidió
+        // su nivel. Se comprueba que **todos** tengan su fila.
+        let sinFila = LogPolicy.missingRows()
+        report.check("todos los eventos tienen su fila en la tabla",
+                     sinFila.isEmpty, sinFila.map(\.rawValue).joined(separator: " · "))
+
+        // **La trampa que documenta Apple**: `debug` solo se registra si una herramienta lo pide. Entonces nada
+        // que tenga que **estar** después puede ser `debug`. Esto lo comprueba, en vez de confiar en el criterio.
+        let debeEstarDespues: [LogEvent] = [.appArranco, .appCerro, .envioPedido, .conversacionAbierta,
+                                            .instanciaLiberada, .permisoAvisos, .indiceReconstruido]
+        let enDebug = debeEstarDespues.filter { LogPolicy.rule(for: $0).level == .debug }
+        report.check("nada que tenga que estar después vive en `debug`",
+                     enDebug.isEmpty, enDebug.map(\.rawValue).joined(separator: " · "))
+
+        // Y lo que es una suposición violada va en `fault`, que es exactamente lo que ese nivel significa.
+        report.check("mandar sin referencia es `fault`",
+                     LogPolicy.rule(for: .envioSinReferencia).level == .fault)
+        report.check("una inconsistencia es `fault`",
+                     LogPolicy.rule(for: .consistenciaRota).level == .fault)
+        report.check("el detalle de cada evento RPC es `debug`",
+                     LogPolicy.rule(for: .rpcEvento).level == .debug)
+
+        // **Lo que más importa: que no se filtre contenido.** Se arma la peor línea posible —con un texto y una
+        // ruta que parecen datos de una persona— y se revisa el resultado.
+        let textoPrivado = "mi contraseña es hunter2"
+        // La ruta termina con el nombre de la persona **a propósito**: si la redacción fuera un recorte,
+        // esta comprobación lo tiene que cazar. Si no, pasaba por casualidad.
+        let rutaPrivada = "carpetas/privadas/P4W/alguien.jsonl"
+        let linea = Log.compose(.envioPedido, [
+            (.clave, .key(rutaPrivada)),
+            (.visible, .key(textoPrivado)),
+            (.largo, .number(textoPrivado.count)),
+            (.motivo, .word("normal")),
+            (.huella, .shape(textoPrivado)),
+        ])
+        report.check("la línea **no** contiene el texto",
+                     !linea.contains("hunter2") && !linea.contains("contraseña"), linea)
+        report.check("la línea **no** contiene la ruta de la persona",
+                     !linea.contains("alguien") && !linea.contains("Library"), linea)
+        report.check("la clave es una huella y no un recorte",
+                     !LogValue.key(textoPrivado).text.contains("hunter2")
+                        && !LogValue.key(rutaPrivada).text.contains("alguien")
+                        && LogValue.key(rutaPrivada) == LogValue.key(rutaPrivada),
+                     LogValue.key(rutaPrivada).text)
+        report.check("y el nombre del archivo es la única pieza legible, a propósito",
+                     LogValue.fileName(rutaPrivada).text == "alguien.jsonl")
+        report.check("pero sí deja correlacionar (la forma y el largo están)",
+                     linea.contains("\(textoPrivado.count)u·") && linea.contains("huella="), linea)
+        report.check("y el nombre de archivo sí se puede leer (es lo que identifica)",
+                     LogValue.fileName(rutaPrivada).text == "alguien.jsonl",
+                     LogValue.fileName(rutaPrivada).text)
+        report.check("sin conversación se dice «ninguna», no se deja el hueco",
+                     LogValue.key(nil).text == "ninguna" && LogValue.key("").text == "ninguna")
+
+        // Y que el registro **no tenga un campo para contenido**: la lista es cerrada y esta comprobación la
+        // vigila, porque agregar un campo así sería la forma más fácil de romper la regla sin darse cuenta.
+        let camposDeContenido: Set<String> = ["texto", "contenido", "mensaje", "prompt", "salida"]
+        let filtrados = LogField.allCases.map(\.rawValue).filter { camposDeContenido.contains($0) }
+        report.check("no existe un campo para contenido",
+                     filtrados.isEmpty, filtrados.joined(separator: " · "))
+    }
+
+    // MARK: 48. El verificador de consistencia (Fase 15.2)
+
+    /// Las tres formas en que «¿de qué conversación es esto?» se contestó mal, probadas como funciones puras.
+    private static func checkConsistency(_ report: Reporter) {
+        report.section("48. El verificador de consistencia: las tres formas de fallar (Fase 15.2)")
+
+        let vis = "espacios/P4W/visible.jsonl"
+        let otra = "espacios/P4W/otra.jsonl"
+
+        // **El bug que reportó Jorge**: conversación abierta en pantalla, referencia en nil.
+        let sinRef = ConsistencyCheck.send(reference: nil, visible: vis, instancia: nil)
+        report.check("mandar con una conversación abierta y sin referencia es una violación",
+                     sinRef == .envioSinReferencia(visible: vis) && sinRef.isViolation,
+                     sinRef.motivo)
+        report.check("y se registra como `fault`",
+                     sinRef.event == .consistenciaRota
+                        && LogPolicy.rule(for: sinRef.event).level == .fault)
+
+        // **La mezcla**: la referencia es la de otra conversación.
+        let mezcla = ConsistencyCheck.send(reference: otra, visible: vis, instancia: otra)
+        report.check("mandar con la referencia de otra conversación es una violación",
+                     mezcla.isViolation, mezcla.motivo)
+
+        // **La otra cara**: la instancia enganchada es la de otra conversación (viva a propósito).
+        let instanciaAjena = ConsistencyCheck.bind(reference: vis, visible: vis, instancia: otra)
+        report.check("enganchar una instancia de otra conversación es una violación",
+                     instanciaAjena.isViolation, instanciaAjena.motivo)
+
+        // Abrir: la referencia tiene que ser la de la que se abre.
+        report.check("abrir una conversación con la referencia de otra es una violación",
+                     ConsistencyCheck.open(reference: otra, visible: vis).isViolation)
+
+        // **Y que no dé falsos positivos**, que es tan importante como detectar: si marca todo, no sirve.
+        report.check("todo en orden no es una violación",
+                     !ConsistencyCheck.send(reference: vis, visible: vis, instancia: vis).isViolation
+                        && !ConsistencyCheck.bind(reference: vis, visible: vis, instancia: vis).isViolation)
+        report.check("no tener nada abierto no es una violación (es no tener nada abierto)",
+                     !ConsistencyCheck.send(reference: nil, visible: nil, instancia: nil).isViolation
+                        && ConsistencyCheck.send(reference: nil, visible: nil, instancia: nil) == .sinConversacion)
+
+        // Una conversación nueva en preparación se identifica por su uuid y su instancia por la clave del
+        // pool: compararlas daría un falso positivo, y por eso esa comparación no se hace.
+        report.check("una conversación nueva en preparación no da falso positivo",
+                     !ConsistencyCheck.bind(reference: nil, visible: nil, instancia: "#uuid-nuevo").isViolation)
+    }
+
     // MARK: 46. Dónde está trabajando Pi (Fase 13.5)
 
     /// El indicador por conversación: qué estados merecen una marca y cuáles no.
@@ -3071,7 +3257,7 @@ enum SelfCheck {
             let ausenteDelIndice = try store.pruneTabs(exists: { _ in true })
             report.check("una conversación que el índice no trajo **se queda** en su space",
                          ausenteDelIndice == 0 && (store.all().first?.tabs.count == 3),
-                         "sacó \(ausenteDelIndice) · quedan \(try store.all().first?.tabs.count ?? 0)")
+                         "sacó \(ausenteDelIndice) · quedan \(store.all().first?.tabs.count ?? 0)")
 
             // Y cuando el archivo **de verdad** no está, sale: esa es la única razón para sacarla.
             let borrada = try store.pruneTabs(exists: { $0 != "/b/dos.jsonl" })
@@ -3080,7 +3266,7 @@ enum SelfCheck {
                          "se fue la del archivo que no está")
 
             // Y las que quedan conservan **el orden** en el que estaban.
-            let rutas = (try store.all().first?.tabs ?? []).map(\.sessionPath)
+            let rutas = (store.all().first?.tabs ?? []).map(\.sessionPath)
             report.check("y las que quedan mantienen su orden",
                          rutas == ["/a/una.jsonl", "/c/tres.jsonl"], rutas.joined(separator: " · "))
         } catch {

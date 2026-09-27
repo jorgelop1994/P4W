@@ -238,9 +238,11 @@ public final class InstanceSupervisor: @unchecked Sendable {
         let chosen = profile ?? config.defaultProfile
 
         if let existing = liveInstance(for: key), existing.isReusable {
+            Log.record(.instanciaAdquirida, [(.clave, .key(key)), (.tipo, .word("reusada"))])
             return existing
         }
 
+        Log.record(.instanciaAdquirida, [(.clave, .key(key)), (.tipo, .word("lanzada"))])
         lock.lock()
         instances.removeValue(forKey: key)
         lock.unlock()
@@ -399,6 +401,9 @@ public final class InstanceSupervisor: @unchecked Sendable {
         lock.unlock()
         onReap?(key, outcome)
         publish()
+        // El embudo por el que pasa **todo** liberado: ⌘W, el reaper por inactividad, la presión de memoria y
+        // el cierre. Un solo lugar, así que ninguna liberación se escapa del registro.
+        Log.record(.instanciaLiberada, [(.clave, .key(key)), (.motivo, .word(reason.rawValue))])
         return outcome
     }
 

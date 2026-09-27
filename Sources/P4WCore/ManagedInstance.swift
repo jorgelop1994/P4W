@@ -734,6 +734,9 @@ public final class ManagedInstance: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         _lastActivity = Date()
+        // Solo el **tipo**, nunca el contenido: el evento puede llevar la salida entera de una herramienta, y
+        // registrarla sería una copia de lo que hizo Pi. En `debug`, que no se guarda salvo que se pida.
+        Log.record(.rpcEvento, [(.tipo, .word(event.kindName))])
 
         switch event {
         case .messageStart(let role): applyMessageStart(role)

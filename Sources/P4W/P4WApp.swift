@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Punto de entrada propio para poder ofrecer un modo de autodiagnóstico sin ventana.
 /// `P4W --self-check` verifica la capa de datos y termina; sin argumentos, abre la app.
+/// `P4W --logs [minutos]` vuelca los registros de la app a la terminal (para diagnosticar sin abrir nada).
 @main
 enum P4WMain {
     static func main() {
@@ -15,6 +16,9 @@ enum P4WMain {
         }
         if CommandLine.arguments.contains("--render-cat") {
             SelfCheck.renderCat()
+        }
+        if let minutos = SelfCheck.logMinutes(from: CommandLine.arguments) {
+            SelfCheck.printLogs(minutes: minutos)
         }
         if CommandLine.arguments.contains("--check-updates") {
             SelfCheck.printUpdates()
