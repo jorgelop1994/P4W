@@ -6,7 +6,8 @@ struct ComposerView: View {
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var accessibility: AccessibilityObserver
     @State private var isDropTarget = false
-    @FocusState private var focused: Bool
+    /// El alto del campo: lo mide el propio campo y lo pide acá.
+    @State private var fieldHeight: CGFloat = 16
 
     var body: some View {
         VStack(spacing: 6) {
@@ -94,13 +95,16 @@ struct ComposerView: View {
                 .foregroundStyle(.secondary)
                 .help("Adjuntar archivos. Se referencian por ruta; no se copian.")
 
-                TextField("Escribile a Pi…  (Enter para enviar, Shift+Enter para salto de línea)",
-                          text: $model.draft, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .lineLimit(1...10)
-                    .focused($focused)
-                    .onSubmit { model.send() }
+                // Un `NSTextView` de verdad, no un `TextField`: ver `ComposerTextView` para el porqué
+                // medido. Avisa en cada tecla —así el borrador se guarda mientras se escribe— y refleja lo
+                // que la app le ponga, así que un borrador recuperado **se ve**.
+                ComposerTextView(
+                    text: Binding(get: { model.draft }, set: { model.draftChanged($0) }),
+                    placeholder: "Escribile a Pi…  (Enter para enviar, Shift+Enter para salto de línea)",
+                    onSubmit: { model.send() },
+                    onHeightChange: { alto in fieldHeight = alto }
+                )
+                .frame(height: fieldHeight)
 
                 if model.isSending {
                     Button {

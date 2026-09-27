@@ -93,6 +93,19 @@ final class AppModel: ObservableObject {
 
     private(set) var piPath: String?
     private var supervisor: InstanceSupervisor?
+    /// Los borradores, uno por conversación.
+    private var draftStore: DraftStore?
+    /// De qué conversación es el texto que hoy está en el campo. `nil` = conversación nueva, sin archivo
+    /// todavía (se guarda bajo una clave fija, así igual sobrevive).
+    private var draftKey: String?
+    /// Clave de la conversación nueva, que todavía no tiene archivo en disco.
+    private static let newConversationDraftKey = "nueva"
+    /// Lo último que se envió, esperando la confirmación para olvidar su borrador.
+    private var pendingSentDraft: (key: String, text: String)?
+    private var draftSaveTask: Task<Void, Never>?
+    /// El observador del cierre de la app, para poder quitarlo.
+    private var terminationObserver: NSObjectProtocol?
+
     /// Último estado dibujado en el Dock, para no redibujar el ícono al pedo.
     private var lastDockState: CatState?
 
@@ -248,6 +261,14 @@ final class AppModel: ObservableObject {
 
         do {
             spacesStore = try SpacesStore()
+            draftStore = try DraftStore()
+            // Cerrar la app es uno de los cuatro momentos de volcado: el texto no puede depender del
+            // guardado con retraso, que puede no haber llegado a correr.
+            terminationObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.saveDraft() }
+            }
             spaces = spacesStore?.all() ?? []
             pinnedPaths = spacesStore?.pinnedPaths() ?? []
             applyPinning()
@@ -346,6 +367,10 @@ final class AppModel: ObservableObject {
     /// muestra. Antes se asignaba a `items` y el primer evento en vivo lo pisaba: la conversación
     /// "abría" y quedaba vacía.
     func open(_ summary: SessionSummary) {
+        // Un solo punto de guardado: cambiar de conversación guarda lo que había y trae lo de la nueva.
+        // Antes esto no existía, y como el borrador era **uno solo para toda la app**, el texto se iba con
+        // la conversación equivocada, listo para mandarse al lugar incorrecto.
+        switchDraft(to: summary.path)
         current = summary
         // Sin esto, después de crear una conversación nueva el placeholder seguía tapando todo:
         // abrir cualquier conversación parecía no cargar nada.
@@ -406,6 +431,7 @@ final class AppModel: ObservableObject {
     func newConversation() {
         // Solo se comprueba que haya supervisor: acá no se usa su valor.
         guard supervisor != nil else { return }
+        switchDraft(to: nil)
         current = nil
         isNewConversation = true
         isLoadingHistory = false
@@ -578,6 +604,9 @@ final class AppModel: ObservableObject {
 
         isNewConversation = false
         transcript.appendUser(text: text, attachments: attachments, queued: queued)
+        // El borrador **no se borra acá**: se olvida cuando el texto ya está en la conversación. Si el envío
+        // falla, tiene que poder volver; y si la app se cierra en el medio, tampoco puede perderse.
+        pendingSentDraft = (key: draftKey ?? Self.newConversationDraftKey, text: text)
         draft = ""
         attachments = []
         isSending = true
@@ -685,6 +714,54 @@ final class AppModel: ObservableObject {
         let nowCollapsed = !isCollapsed(sectionKey)
         try? spacesStore?.setCollapsed(nowCollapsed, section: sectionKey)
         objectWillChange.send()
+    }
+
+    // MARK: Borradores y deshacer
+
+    /// Cambia el borrador activo: guarda el que había y trae el de la conversación nueva.
+    private func switchDraft(to path: String?) {
+        saveDraft()
+        draftKey = path ?? Self.newConversationDraftKey
+        draft = draftStore?.text(for: draftKey ?? "") ?? ""
+    }
+
+    /// Un cambio de lo que escribió la persona. Lo llama el campo en cada tecla.
+    func draftChanged(_ text: String) {
+        FileHandle.standardError.write("DIAG draftChanged \(text.count) car · key=\(draftKey?.suffix(20) ?? "nil")\n".data(using: .utf8)!)
+        guard text != draft else { return }
+        draft = text
+        scheduleDraftSave()
+    }
+
+    /// Guarda el texto que está en el campo, si cambió.
+    func saveDraft() {
+        FileHandle.standardError.write("DIAG saveDraft store=\(draftStore != nil) key=\(draftKey?.suffix(20) ?? "nil") texto=\(draft.count) car\n".data(using: .utf8)!)
+        guard let draftStore, let key = draftKey else { return }
+        try? draftStore.set(draft, for: key)
+    }
+
+    /// Guarda con retraso: escribir no puede castigar el disco en cada tecla, pero tampoco puede perderse.
+    /// El retraso es corto, y hay volcado inmediato en los momentos que importan: cambiar de conversación,
+    /// cerrar una pestaña, enviar y cerrar la app.
+    private func scheduleDraftSave() {
+        draftSaveTask?.cancel()
+        draftSaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.saveDraft() }
+        }
+    }
+
+    /// Olvida el borrador cuando su texto **ya está en la conversación**: eso es la confirmación.
+    func forgetConfirmedDraft() {
+        guard let pending = pendingSentDraft, let draftStore else { return }
+        let inConversation = transcript.items.contains { item in
+            item.author == .user && !pending.text.isEmpty
+                && item.text.hasPrefix(pending.text.prefix(40))
+        }
+        guard inConversation else { return }
+        try? draftStore.remove(for: pending.key)
+        pendingSentDraft = nil
     }
 
     // MARK: Actualizaciones
@@ -1060,6 +1137,7 @@ final class AppModel: ObservableObject {
     /// `⌘W`: cierra la conversación. **No borra nada**: deja de mostrarla y suelta el proceso si no
     /// está fijada. Volver a abrirla desde el historial la trae de vuelta igual.
     func closeCurrentTab() {
+        saveDraft()
         guard let current else { return }
         if pinnedKey == current.path {
             supervisor?.release(current.path)
@@ -1382,6 +1460,8 @@ final class AppModel: ObservableObject {
 
     /// El transcript es la fuente: la UI solo copia lo que él dice.
     private func syncFromTranscript() {
+        // Si el texto enviado ya está en la conversación, se olvida su borrador: eso es la confirmación.
+        forgetConfirmedDraft()
         let fresh = transcript.items
         // Solo el último mensaje se anima, y solo mientras llega.
         let last = fresh.last

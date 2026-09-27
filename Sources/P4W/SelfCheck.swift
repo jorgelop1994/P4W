@@ -74,6 +74,7 @@ enum SelfCheck {
         checkSidebarSections(report)
         checkUpdateCheck(report)
         checkLegibility(report)
+        checkDrafts(report)
         if CommandLine.arguments.contains("--live") { checkLiveNaming(report) }
         if CommandLine.arguments.contains("--live") { checkLiveStream(report) }
         checkReveal(report)
@@ -3001,6 +3002,103 @@ enum SelfCheck {
         report.check("y contiene los diez PNG", FileManager.default.fileExists(
             atPath: "\(work)/icon.iconset/icon_512x512@2x.png"))
         report.line("   \(log.last ?? "")")
+    }
+
+    // MARK: 43. Borradores y deshacer (Fase 11)
+
+    /// Lo que puede fallar acá, y lo que de verdad le pasó a la esposa de Jorge: que el borrador de una
+    /// conversación aparezca en otra, que no sobreviva a cerrar la app, y que deshacer no agrupe el tecleo.
+    private static func checkDrafts(_ report: Reporter) {
+        report.section("43. Borradores y deshacer (Fase 11)")
+
+        let work = "\(NSTemporaryDirectory())p4w-drafts-\(UUID().uuidString.prefix(8))"
+        defer { try? FileManager.default.removeItem(atPath: work) }
+        do {
+            try FileManager.default.createDirectory(atPath: work, withIntermediateDirectories: true)
+            let store = try DraftStore(path: "\(work)/drafts.json")
+
+            report.check("sin nada escrito, no hay borrador", store.text(for: "/c/uno").isEmpty)
+            try store.set("lo que escribí en uno", for: "/c/uno")
+            report.check("el borrador queda bajo su conversación",
+                         store.text(for: "/c/uno") == "lo que escribí en uno")
+
+            // **El bug que se está arreglando**: el texto viajando a otra conversación.
+            report.check("y **no** aparece en otra conversación",
+                         store.text(for: "/c/dos").isEmpty, "antes el borrador era uno solo para toda la app")
+
+            try store.set("lo de dos", for: "/c/dos")
+            report.check("cada conversación conserva lo suyo",
+                         store.text(for: "/c/uno") == "lo que escribí en uno"
+                         && store.text(for: "/c/dos") == "lo de dos",
+                         "\(store.count()) borradores")
+
+            // Sobrevivir a cerrar la app: otro objeto leyendo el mismo archivo.
+            let reopened = try DraftStore(path: "\(work)/drafts.json")
+            report.check("sobrevive a cerrar y volver a abrir la app",
+                         reopened.text(for: "/c/uno") == "lo que escribí en uno"
+                         && reopened.text(for: "/c/dos") == "lo de dos",
+                         "\(reopened.count()) borradores")
+
+            // Se olvida **solo** el de la conversación enviada.
+            try reopened.remove(for: "/c/uno")
+            let third = try DraftStore(path: "\(work)/drafts.json")
+            report.check("olvidar uno no toca los demás",
+                         third.text(for: "/c/uno").isEmpty && third.text(for: "/c/dos") == "lo de dos",
+                         "quedan \(third.count())")
+
+            // Vaciar el campo borra el borrador: no queda basura que después se restaure sola.
+            try third.set("", for: "/c/dos")
+            report.check("vaciar el campo olvida el borrador", third.count() == 0)
+        } catch {
+            report.check("los borradores funcionan", false, "\(error)")
+        }
+
+        // El deshacer del campo no se verifica acá: lo trae el `NSTextView` y es comportamiento de AppKit,
+        // con el tecleo ya agrupado. Antes había un historial propio, y se quitó justamente porque el campo
+        // nuevo lo hace mejor — dejar sus comprobaciones habría dado una confianza falsa.
+
+        // ── Y el mecanismo del campo nuevo: que AppKit **avise** cada cambio ──
+        //
+        // Es lo que el campo de SwiftUI no hacía (avisaba recién al perder el foco), y el eslabón que hacía
+        // imposible guardar el borrador mientras se escribe. Se verifica acá, sin GUI y sin depender de la
+        // accesibilidad: se arma un `NSTextView` igual al del compositor, se registra el mismo observador, y
+        // se le mete texto como lo haría una tecla.
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 300, height: 20))
+        // **La configuración de verdad**, la misma que usa el compositor.
+        ComposerTextView.configure(textView, placeholder: "prueba")
+        var recibido = ""
+        let observador = NotificationCenter.default.addObserver(
+            forName: NSText.didChangeNotification, object: textView, queue: .main
+        ) { nota in
+            recibido = (nota.object as? NSTextView)?.string ?? ""
+        }
+        textView.insertText("hola", replacementRange: NSRange(location: 0, length: 0))
+        report.check("el campo avisa a la app **en cada tecla**",
+                     recibido == "hola",
+                     recibido.isEmpty ? "no avisó: con esto el borrador no se puede guardar mientras se escribe"
+                                      : "avisó con «\(recibido)»")
+        textView.insertText(" mundo", replacementRange: NSRange(location: 4, length: 0))
+        report.check("y sigue avisando en la siguiente",
+                     recibido == "hola mundo", "«\(recibido)»")
+        // Y que el campo pueda recibir texto **desde la app**: es lo que hace que un borrador recuperado se
+        // vea. El campo de SwiftUI fallaba también en esta dirección.
+        textView.string = "recuperado"
+        report.check("y acepta el texto que le pone la app (el borrador recuperado se ve)",
+                     textView.string == "recuperado")
+        report.check("el campo nuevo trae deshacer propio",
+                     textView.allowsUndo, "es la forma estándar, con AppKit agrupando el tecleo")
+        // Y la configuración que evita romper código: comillas "inteligentes" y autocorrector apagados.
+        report.check("el campo no hace comillas «inteligentes» ni autocorrección",
+                     !textView.isAutomaticQuoteSubstitutionEnabled
+                     && !textView.isAutomaticDashSubstitutionEnabled
+                     && !textView.isAutomaticTextReplacementEnabled
+                     && !textView.isAutomaticSpellingCorrectionEnabled,
+                     "esto es para hablarle a un agente que escribe código")
+        report.check("el campo se estira a lo ancho del contenedor",
+                     textView.autoresizingMask.contains(.width)
+                     && textView.textContainer?.widthTracksTextView == true,
+                     "sin esto el campo mide cero y no se ve nada")
+        NotificationCenter.default.removeObserver(observador)
     }
 
     // MARK: 42. Legibilidad y contraste (Fase 10)
