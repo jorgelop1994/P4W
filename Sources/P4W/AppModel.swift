@@ -125,7 +125,30 @@ final class AppModel: ObservableObject {
 
     private var instance: ManagedInstance?
     /// Cómo volver a abrir la conversación si el reaper la apagó.
-    private var currentRef: SessionRef?
+    /// La clave de una **conversación nueva en preparación**: existe desde que se crea, antes de que Pi
+    /// escriba el archivo. Es el lugar donde antes vivía la constante `"nueva"`.
+    private var pendingConversationKey: String?
+
+    /// La referencia de la conversación que se está mirando, **derivada** y no guardada aparte.
+    ///
+    /// Acá había dos verdades sobre lo mismo: `current` (lo que se ve) y `currentRef` (a quién se le manda
+    /// el mensaje). Se desincronizaron, y de ahí salieron los dos síntomas que reportó Jorge:
+    ///
+    /// - con la referencia en **nil**, la app decía *"No hay conversación abierta"* **con una conversación
+    ///   abierta en pantalla**;
+    /// - con la referencia **vieja** (la de la conversación anterior, que sigue viva a propósito), el
+    ///   mensaje **se iba a la otra conversación** y sus respuestas se dibujaban en la que se estaba
+    ///   mirando — la mezcla que reportó primero.
+    ///
+    /// La causa de fondo: `open()` dejó de armar la referencia cuando la apertura se volvió instantánea
+    /// (leer el final del archivo, sin arrancar proceso), y la única función que la armaba
+    /// (`attachInstance`) quedó **definida y sin llamar**. Con una sola verdad, esa clase de bug no puede
+    /// volver: no hay nada que pueda quedar viejo.
+    private var currentRef: SessionRef? {
+        if let current { return .existing(path: current.path) }
+        if let key = pendingConversationKey { return .new(id: key, directory: nil) }
+        return nil
+    }
     /// Evita que el reaper toque lo que se está viendo (y lo que se está enviando).
     private var pinnedKey: String?
     private let transcript = LiveTranscript()
@@ -385,6 +408,9 @@ final class AppModel: ObservableObject {
         // Un solo punto de guardado: cambiar de conversación guarda lo que había y trae lo de la nueva.
         // Antes esto no existía, y como el borrador era **uno solo para toda la app**, el texto se iba con
         // la conversación equivocada, listo para mandarse al lugar incorrecto.
+        // Abrir una conversación existente **olvida** la nueva que estuviera en preparación: desde acá la
+        // referencia sale de lo que se ve, y no de un estado anterior.
+        pendingConversationKey = nil
         switchDraft(to: summary.path)
         current = summary
         // Sin esto, después de crear una conversación nueva el placeholder seguía tapando todo:
@@ -459,7 +485,7 @@ final class AppModel: ObservableObject {
         // No se arranca ningún proceso acá: crear una conversación es preparar el estado. El proceso
         // nace cuando se envía el primer mensaje (`ensureInstance`), fuera del hilo principal. Antes
         // esto adquiría en el hilo principal y la ventana se congelaba al crear una conversación.
-        currentRef = .new(id: newKey, directory: nil)
+        pendingConversationKey = newKey
         pinnedKey = newKey
         applyPinning()
         currentModel = nil
@@ -504,8 +530,9 @@ final class AppModel: ObservableObject {
                     }
                     self.draftKey = match.path
                     if let instance = self.instance {
-                        let ref = self.currentRef
-                        self.bind(instance, ref: ref, key: match.path)
+                        // El enganche cambia de clave: la conversación ya tiene archivo, y de ahí en
+                        // adelante se la identifica por su ruta.
+                        self.bind(instance, key: match.path)
                     }
                     // Y ahora que el archivo existe, se cumple la intención del space que tenía esa
                     // conversación: se busca **por su clave**, no por "lo último que se pidió".
@@ -529,9 +556,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func bind(_ instance: ManagedInstance, ref: SessionRef?, key: String?) {
+    /// Engancha una instancia viva a la conversación que se está mirando.
+    ///
+    /// Ya no recibe ni guarda la referencia: se deriva de `current`. Guardarla era tener dos verdades sobre
+    /// lo mismo, y una de las dos quedaba vieja.
+    private func bind(_ instance: ManagedInstance, key: String?) {
         self.instance = instance
-        if let ref { self.currentRef = ref }
         if let key {
             pinnedKey = key
             applyPinning()
@@ -627,13 +657,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Envoltorio con la misma garantía: nunca adquiere en el hilo que llama.
-    private func attachInstance(for summary: SessionSummary) {
-        let profile = selectedProfile
-        Task.detached(priority: .userInitiated) { [weak self] in
-            await self?.rebindInstance(for: summary, profile: profile)
-        }
-    }
+    // Acá vivía `attachInstance`: la única función que armaba la referencia de una conversación
+    // existente, **definida y sin llamar desde que la apertura se volvió instantánea**. Se fue con el
+    // arreglo: la referencia ahora se deriva de la conversación visible, así que no hay nada que armar.
 
     // MARK: Conversación
 
@@ -698,7 +724,12 @@ final class AppModel: ObservableObject {
     /// Devuelve una instancia usable, despertándola si el reaper la apagó. Que se apague para
     /// liberar memoria **no** debe romperle la conversación al usuario.
     private func ensureInstance() async -> ManagedInstance? {
-        if let instance, instance.isReusable { return instance }
+        // La instancia en mano tiene que ser la de **esta** conversación. Si se cambió de conversación, la
+        // que estaba enganchada es de la otra (y sigue viva a propósito, por el multitasking): reusarla era
+        // mandar el mensaje al lugar equivocado.
+        if let instance, let ref = currentRef, instance.isReusable, instance.poolKey == ref.key {
+            return instance
+        }
         guard let supervisor, let ref = currentRef else {
             await MainActor.run {
                 self.isSending = false
@@ -707,7 +738,6 @@ final class AppModel: ObservableObject {
             return nil
         }
         await MainActor.run { self.statusNote = "Despertando la conversación…" }
-        let key = ref.key
         let profile = await MainActor.run { self.selectedProfile }
         let revived = try? await Task.detached(priority: .userInitiated) {
             try supervisor.acquire(ref, profile: profile)
@@ -725,7 +755,7 @@ final class AppModel: ObservableObject {
             // La clave del enganche es la de la conversación que se está mirando: su **ruta** si ya tiene
             // archivo, o su **uuid** si es nueva y Pi todavía no escribió nada. Es la misma clave que usan
             // los borradores y la que decide en qué transcript se dibuja.
-            self.bind(revived, ref: ref, key: self.draftKey)
+            self.bind(revived, key: self.draftKey)
         }
         return revived
     }
@@ -1575,7 +1605,7 @@ final class AppModel: ObservableObject {
             await MainActor.run { self.lastError = "No pude abrir el proceso de esta conversación." }
             return false
         }
-        await MainActor.run { self.bind(acquired, ref: ref, key: summary.path) }
+        await MainActor.run { self.bind(acquired, key: summary.path) }
         return true
     }
 

@@ -3064,19 +3064,19 @@ enum SelfCheck {
                 try store.move(sessionPath: ruta, profileName: "lean", toSpaceID: space.id)
             }
             report.check("el space arranca con sus tres conversaciones",
-                         try store.all().first?.tabs.count == 3)
+                         store.all().first?.tabs.count == 3)
 
             // **La prueba del bug**: una conversación que el índice **no trajo** (ausencia momentánea) tiene
             // que quedarse en su space. Se simula con la pregunta por el disco: el archivo existe.
             let ausenteDelIndice = try store.pruneTabs(exists: { _ in true })
             report.check("una conversación que el índice no trajo **se queda** en su space",
-                         ausenteDelIndice == 0 && (try store.all().first?.tabs.count == 3),
+                         ausenteDelIndice == 0 && (store.all().first?.tabs.count == 3),
                          "sacó \(ausenteDelIndice) · quedan \(try store.all().first?.tabs.count ?? 0)")
 
             // Y cuando el archivo **de verdad** no está, sale: esa es la única razón para sacarla.
             let borrada = try store.pruneTabs(exists: { $0 != "/b/dos.jsonl" })
             report.check("solo sale si su archivo no existe",
-                         borrada == 1 && (try store.all().first?.tabs.count == 2),
+                         borrada == 1 && (store.all().first?.tabs.count == 2),
                          "se fue la del archivo que no está")
 
             // Y las que quedan conservan **el orden** en el que estaban.
