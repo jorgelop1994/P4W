@@ -106,7 +106,10 @@ final class AppModel: ObservableObject {
     /// todavía (se guarda bajo una clave fija, así igual sobrevive).
     private var draftKey: String?
     /// Clave de la conversación nueva, que todavía no tiene archivo en disco.
-    private static let newConversationDraftKey = "nueva"
+    // Acá vivía la constante `"nueva"`, que era la clave de **todas** las conversaciones nuevas mientras no
+    // tuvieran archivo. Ahora la clave es el `uuid` de cada una: la misma que se le pasa a Pi con
+    // `--session-id`. Con la constante, dos conversaciones nuevas compartían dueño del transcript y la
+    // primera seguía dibujando en la segunda.
     /// Lo último que se envió, esperando la confirmación para olvidar su borrador.
     private var pendingSentDraft: (key: String, text: String)?
     private var draftSaveTask: Task<Void, Never>?
@@ -438,7 +441,10 @@ final class AppModel: ObservableObject {
     func newConversation() {
         // Solo se comprueba que haya supervisor: acá no se usa su valor.
         guard supervisor != nil else { return }
-        switchDraft(to: nil)
+        // La identidad se genera **antes** de cambiar de conversación: desde este instante la conversación
+        // nueva ya tiene clave, aunque su archivo no exista todavía.
+        let newKey = UUID().uuidString
+        switchDraft(to: newKey)
         current = nil
         isNewConversation = true
         isLoadingHistory = false
@@ -448,7 +454,6 @@ final class AppModel: ObservableObject {
         // No se arranca ningún proceso acá: crear una conversación es preparar el estado. El proceso
         // nace cuando se envía el primer mensaje (`ensureInstance`), fuera del hilo principal. Antes
         // esto adquiría en el hilo principal y la ventana se congelaba al crear una conversación.
-        let newKey = UUID().uuidString
         currentRef = .new(id: newKey, directory: nil)
         pinnedKey = newKey
         applyPinning()
@@ -462,19 +467,36 @@ final class AppModel: ObservableObject {
     /// **No controla lo que se muestra**: eso ya no depende de esto, así que si el archivo todavía
     /// no está escrito solo se reintenta, sin dejar la ventana en un estado raro.
     private func locateNewConversation(attempt: Int = 0) {
-        guard let instance, current == nil else { return }
+        // **Qué conversación es esta tarea.** Antes acá se miraba `current == nil`, que es verdad para
+        // *cualquier* conversación nueva: así, la tarea de la #1 despertaba más tarde y hacía
+        // `current = match`, **cambiándole la vista a la persona** que ya estaba escribiendo en la #2. La
+        // tarea se identifica por la clave de la conversación que la disparó, y solo actúa si esa sigue
+        // siendo la que se está mirando.
+        let miClave = currentRef?.key
+        guard let miClave, let instance, current == nil else { return }
         let wanted = instance.sessionID
         let root = SessionCatalog.defaultRoot
         Task.detached(priority: .utility) {
             let loaded = SessionCatalog.load(root: root)
             await MainActor.run {
                 self.sessions = loaded
+                // Si la persona ya se fue a otra conversación, esta tarea **no toca lo que se ve**: solo
+                // deja el catálogo al día. Es la diferencia entre "encontré el archivo" y "cambiá la
+                // pantalla".
+                guard self.currentRef?.key == miClave else { return }
                 if let match = loaded.first(where: { $0.id == wanted }) {
                     self.current = match
                     // La conversación nueva ya tiene archivo, así que cambia su clave: el dueño del
                     // transcript y el enganche de la instancia pasan a la ruta nueva. Sin esto, la respuesta
                     // dejaría de dibujarse en cuanto Pi creara el archivo.
                     self.transcriptOwner = match.path
+                    // El borrador estaba guardado bajo el `uuid` (la conversación no tenía archivo). Ahora
+                    // su clave es la ruta, así que se muda el texto y se olvida la clave vieja: sin esto el
+                    // borrador quedaría huérfano y al volver a la conversación aparecería vacío.
+                    if let store = self.draftStore, miClave != match.path {
+                        try? store.set(self.draft, for: match.path)
+                        try? store.remove(for: miClave)
+                    }
                     self.draftKey = match.path
                     if let instance = self.instance {
                         let ref = self.currentRef
@@ -485,8 +507,9 @@ final class AppModel: ObservableObject {
                         self.pendingSpaceID = nil
                         self.move(match, toSpaceID: spaceID)
                     }
-                } else if attempt < 3 {
-                    // El archivo puede tardar en aparecer; se reintenta sin bloquear nada.
+                } else if attempt < 3, self.currentRef?.key == miClave {
+                    // El archivo puede tardar en aparecer; se reintenta sin bloquear nada. Y **solo si esta
+                    // conversación sigue siendo la actual**: si la persona se fue, no hay nada que buscar.
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 1_500_000_000)
                         self.locateNewConversation(attempt: attempt + 1)
@@ -627,7 +650,7 @@ final class AppModel: ObservableObject {
         // Si hay un space activo, la conversación nueva va a caer ahí cuando su archivo exista.
         pendingSpaceID = activeSpaceID
 
-        // La conversación ya arrancó: dejar de mostrar el estado "nueva" es lo que hacía que el
+        // La conversación ya arrancó: dejar de mostrar el estado de conversación nueva es lo que hacía que el
         // mensaje recién enviado no apareciera.
         // Si ya hay un turno en curso, el mensaje se encola y hay que decirlo en la burbuja.
         let busy = instance?.isWorking ?? false
@@ -638,7 +661,7 @@ final class AppModel: ObservableObject {
         transcript.appendUser(text: text, attachments: attachments, queued: queued)
         // El borrador **no se borra acá**: se olvida cuando el texto ya está en la conversación. Si el envío
         // falla, tiene que poder volver; y si la app se cierra en el medio, tampoco puede perderse.
-        pendingSentDraft = (key: draftKey ?? Self.newConversationDraftKey, text: text)
+        pendingSentDraft = (key: draftKey ?? "", text: text)
         draft = ""
         attachments = []
         isSending = true
@@ -687,8 +710,9 @@ final class AppModel: ObservableObject {
         }
         await MainActor.run {
             self.statusNote = nil
-            // La clave del enganche es la de la conversación que se está mirando: para una que ya existe es
-            // su ruta, y para una nueva es la clave de "nueva" (la misma que usan los borradores).
+            // La clave del enganche es la de la conversación que se está mirando: su **ruta** si ya tiene
+            // archivo, o su **uuid** si es nueva y Pi todavía no escribió nada. Es la misma clave que usan
+            // los borradores y la que decide en qué transcript se dibuja.
             self.bind(revived, ref: ref, key: self.draftKey)
         }
         return revived
@@ -753,12 +777,14 @@ final class AppModel: ObservableObject {
     // MARK: Borradores y deshacer
 
     /// Cambia el borrador activo: guarda el que había y trae el de la conversación nueva.
-    private func switchDraft(to path: String?) {
+    /// Cambia de conversación. La clave es la identidad de la que se abre: su **ruta** si ya tiene archivo,
+    /// o su **`uuid`** si es nueva y Pi todavía no escribió nada.
+    private func switchDraft(to key: String) {
         saveDraft()
-        draftKey = path ?? Self.newConversationDraftKey
+        draftKey = key
         // La misma clave identifica a la conversación que se está mirando: es la dueña del transcript.
-        transcriptOwner = draftKey
-        draft = draftStore?.text(for: draftKey ?? "") ?? ""
+        transcriptOwner = key
+        draft = draftStore?.text(for: key) ?? ""
     }
 
     /// Un cambio de lo que escribió la persona. Lo llama el campo en cada tecla.
