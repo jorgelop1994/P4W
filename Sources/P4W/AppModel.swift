@@ -45,7 +45,9 @@ final class AppModel: ObservableObject {
     @Published var activeSpaceID: String?
     /// Space elegido para una conversación que todavía no tiene archivo. No se puede anotar una ruta
     /// que no existe, así que se anota la intención y se cumple cuando el archivo aparece.
-    private var pendingSpaceID: String?
+    /// A qué space va cada conversación **en vuelo**, por su identidad. Antes era **un solo valor**: con
+    /// dos envíos a la vez, el segundo pisaba al primero y una conversación terminaba en el space de la otra.
+    private var pendingSpaces: [String: String] = [:]
     private var spacesStore: SpacesStore?
     private var preferences: PreferencesStore?
     /// Lo que las extensiones están reportando: la clave y su texto, en orden de llegada.
@@ -111,7 +113,9 @@ final class AppModel: ObservableObject {
     // `--session-id`. Con la constante, dos conversaciones nuevas compartían dueño del transcript y la
     // primera seguía dibujando en la segunda.
     /// Lo último que se envió, esperando la confirmación para olvidar su borrador.
-    private var pendingSentDraft: (key: String, text: String)?
+    /// Lo que se envió y todavía no se confirmó, por conversación. Antes era un solo valor, con el mismo
+    /// problema: el segundo envío pisaba al primero y el borrador de una nunca se olvidaba.
+    private var pendingSentDrafts: [String: String] = [:]
     private var draftSaveTask: Task<Void, Never>?
     /// El observador del cierre de la app, para poder quitarlo.
     private var terminationObserver: NSObjectProtocol?
@@ -359,7 +363,7 @@ final class AppModel: ObservableObject {
                     }
                     // Con el índice al día se sabe qué conversaciones existen: los tabs que apuntan a
                     // otras se sacan solos, sin que quede nada colgando.
-                    self.pruneSpaces(against: Set(fresh.map(\.path)))
+                    self.pruneSpaces()
                     self.refreshClusterSuggestions()
                 }
             } catch {
@@ -502,10 +506,15 @@ final class AppModel: ObservableObject {
                         let ref = self.currentRef
                         self.bind(instance, ref: ref, key: match.path)
                     }
-                    // Y ahora que el archivo existe, se cumple la intención del space activo.
-                    if let spaceID = self.pendingSpaceID {
-                        self.pendingSpaceID = nil
+                    // Y ahora que el archivo existe, se cumple la intención del space que tenía esa
+                    // conversación: se busca **por su clave**, no por "lo último que se pidió".
+                    if let spaceID = self.pendingSpaces.removeValue(forKey: miClave) {
                         self.move(match, toSpaceID: spaceID)
+                    }
+                    // Lo enviado pendiente de confirmar también cambia de clave, para que su borrador se
+                    // olvide cuando corresponda.
+                    if let texto = self.pendingSentDrafts.removeValue(forKey: miClave) {
+                        self.pendingSentDrafts[match.path] = texto
                     }
                 } else if attempt < 3, self.currentRef?.key == miClave {
                     // El archivo puede tardar en aparecer; se reintenta sin bloquear nada. Y **solo si esta
@@ -648,7 +657,9 @@ final class AppModel: ObservableObject {
         guard !text.isEmpty || !images.isEmpty else { return }
 
         // Si hay un space activo, la conversación nueva va a caer ahí cuando su archivo exista.
-        pendingSpaceID = activeSpaceID
+        // Si hay un space activo, la conversación nueva va a caer ahí cuando su archivo exista. Se anota
+        // **por conversación**, así dos envíos en vuelo no se pisan.
+        if let spaceID = activeSpaceID, let key = draftKey { pendingSpaces[key] = spaceID }
 
         // La conversación ya arrancó: dejar de mostrar el estado de conversación nueva es lo que hacía que el
         // mensaje recién enviado no apareciera.
@@ -661,7 +672,7 @@ final class AppModel: ObservableObject {
         transcript.appendUser(text: text, attachments: attachments, queued: queued)
         // El borrador **no se borra acá**: se olvida cuando el texto ya está en la conversación. Si el envío
         // falla, tiene que poder volver; y si la app se cierra en el medio, tampoco puede perderse.
-        pendingSentDraft = (key: draftKey ?? "", text: text)
+        if let key = draftKey { pendingSentDrafts[key] = text }
         draft = ""
         attachments = []
         isSending = true
@@ -814,14 +825,20 @@ final class AppModel: ObservableObject {
 
     /// Olvida el borrador cuando su texto **ya está en la conversación**: eso es la confirmación.
     func forgetConfirmedDraft() {
-        guard let pending = pendingSentDraft, let draftStore else { return }
-        let inConversation = transcript.items.contains { item in
-            item.author == .user && !pending.text.isEmpty
-                && item.text.hasPrefix(pending.text.prefix(40))
+        guard let draftStore else { return }
+        // Se recorre **cada** conversación con un envío pendiente, no "la última": con dos envíos a la vez,
+        // solo se confirmaba uno y el borrador del otro quedaba para siempre.
+        for (key, text) in pendingSentDrafts where !text.isEmpty {
+            let estaEnLaConversacion = transcript.items.contains { item in
+                item.author == .user && item.text.hasPrefix(text.prefix(40))
+            }
+            guard estaEnLaConversacion else { continue }
+            try? draftStore.remove(for: key)
+            // Y si ese texto todavía está en la caja de esa misma conversación, se limpia: ya se envió. Sin
+            // esto, al volver a la conversación aparecería el texto ya enviado, listo para mandarse dos veces.
+            if draftKey == key, draft.hasPrefix(text.prefix(40)) { draft = "" }
+            pendingSentDrafts.removeValue(forKey: key)
         }
-        guard inConversation else { return }
-        try? draftStore.remove(for: pending.key)
-        pendingSentDraft = nil
     }
 
     // MARK: Actualizaciones
@@ -1306,10 +1323,17 @@ final class AppModel: ObservableObject {
 
     /// Saca del tablero los tabs cuyos archivos ya no están. Se llama después de indexar, cuando se
     /// sabe qué conversaciones existen de verdad.
-    func pruneSpaces(against paths: Set<String>) {
+    /// Poda **contra el disco**, no contra lo que el índice acaba de leer.
+    ///
+    /// Antes se sacaba la pestaña si la conversación no estaba en la lista recién leída. Y esa lista puede
+    /// venir parcial —o un archivo no se poder leer un instante—, así que una conversación **salía de su
+    /// space sola** y reaparecía en "Sin space": exactamente lo que Jorge reportó, *"deben mantenerse en el
+    /// space en que las dejo"*. Ahora se pregunta si **el archivo existe**, que es otra pregunta y no depende
+    /// de que el índice haya terminado bien.
+    func pruneSpaces() {
         guard let store = spacesStore else { return }
         do {
-            let removed = try store.pruneTabs(existingPaths: paths)
+            let removed = try store.pruneTabs { FileManager.default.fileExists(atPath: $0) }
             if removed > 0 {
                 refreshSpaces()
                 statusNote = "Saqué \(removed) pestaña(s) de conversaciones que ya no están."

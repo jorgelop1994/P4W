@@ -257,6 +257,26 @@ public final class SpacesStore: @unchecked Sendable {
     /// Se le pasa el conjunto de rutas que **sí** existen en vez de mirar el disco: así la decisión de
     /// qué está vivo queda en un solo lugar (el índice) y esto se puede verificar sin tocar archivos.
     /// Devuelve cuántos sacó.
+    /// Saca las pestañas cuyo archivo **ya no existe**, preguntándole al disco.
+    ///
+    /// Es distinto de podar contra "lo que el índice acaba de traer": esa lista puede venir parcial —o un
+    /// archivo no se poder leer un instante— y entonces una conversación **saldría de su space por una
+    /// ausencia momentánea**. Es lo que Jorge reportó: *"deben mantenerse en el space en que las dejo"*.
+    ///
+    /// La pregunta se recibe como función para poder verificarla **sin tocar archivos**.
+    @discardableResult
+    public func pruneTabs(exists: (String) -> Bool) throws -> Int {
+        lock.lock(); defer { lock.unlock() }
+        var removed = 0
+        for index in spaces.indices {
+            let before = spaces[index].tabs.count
+            spaces[index].tabs.removeAll { !exists($0.sessionPath) }
+            removed += before - spaces[index].tabs.count
+        }
+        if removed > 0 { try save() }
+        return removed
+    }
+
     @discardableResult
     public func pruneTabs(existingPaths: Set<String>) throws -> Int {
         lock.lock(); defer { lock.unlock() }

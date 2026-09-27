@@ -76,6 +76,7 @@ enum SelfCheck {
         checkLegibility(report)
         checkDrafts(report)
         checkMultitasking(report)
+        checkSpaceMembership(report)
         if CommandLine.arguments.contains("--live") { checkLiveNaming(report) }
         if CommandLine.arguments.contains("--live") { checkLiveStream(report) }
         checkReveal(report)
@@ -3013,6 +3014,51 @@ enum SelfCheck {
         report.check("y contiene los diez PNG", FileManager.default.fileExists(
             atPath: "\(work)/icon.iconset/icon_512x512@2x.png"))
         report.line("   \(log.last ?? "")")
+    }
+
+    // MARK: 45. Pertenencia a los spaces (Fase 14.4)
+
+    /// Que una conversación **se quede en el space donde la dejaron**. El bug era que se podaba contra la
+    /// lista que el índice acababa de leer, así que una ausencia momentánea la expulsaba.
+    private static func checkSpaceMembership(_ report: Reporter) {
+        report.section("45. Pertenencia: una conversación no se sale sola de su space (Fase 14.4)")
+
+        let work = "\(NSTemporaryDirectory())p4w-spaces-\(UUID().uuidString.prefix(8))"
+        defer { try? FileManager.default.removeItem(atPath: work) }
+        do {
+            try FileManager.default.createDirectory(atPath: work, withIntermediateDirectories: true)
+            let store = try SpacesStore(path: "\(work)/spaces.json")
+            let space = try store.createSpace(name: "Trabajo")
+            for ruta in ["/a/una.jsonl", "/b/dos.jsonl", "/c/tres.jsonl"] {
+                try store.move(sessionPath: ruta, profileName: "lean", toSpaceID: space.id)
+            }
+            report.check("el space arranca con sus tres conversaciones",
+                         try store.all().first?.tabs.count == 3)
+
+            // **La prueba del bug**: una conversación que el índice **no trajo** (ausencia momentánea) tiene
+            // que quedarse en su space. Se simula con la pregunta por el disco: el archivo existe.
+            let ausenteDelIndice = try store.pruneTabs(exists: { _ in true })
+            report.check("una conversación que el índice no trajo **se queda** en su space",
+                         ausenteDelIndice == 0 && (try store.all().first?.tabs.count == 3),
+                         "sacó \(ausenteDelIndice) · quedan \(try store.all().first?.tabs.count ?? 0)")
+
+            // Y cuando el archivo **de verdad** no está, sale: esa es la única razón para sacarla.
+            let borrada = try store.pruneTabs(exists: { $0 != "/b/dos.jsonl" })
+            report.check("solo sale si su archivo no existe",
+                         borrada == 1 && (try store.all().first?.tabs.count == 2),
+                         "se fue la del archivo que no está")
+
+            // Y las que quedan conservan **el orden** en el que estaban.
+            let rutas = (try store.all().first?.tabs ?? []).map(\.sessionPath)
+            report.check("y las que quedan mantienen su orden",
+                         rutas == ["/a/una.jsonl", "/c/tres.jsonl"], rutas.joined(separator: " · "))
+        } catch {
+            report.check("la poda de spaces funciona", false, "\(error)")
+        }
+
+        // Y las dos reglas de dónde cae una conversación nueva, que son decisión y no azar.
+        report.line("   una conversación nueva con un space activo nace **dentro de ese space**;")
+        report.line("   sin space activo va a «Sin space», que es la bandeja de entrada.")
     }
 
     // MARK: 44. Multitasking (Fase 13)
