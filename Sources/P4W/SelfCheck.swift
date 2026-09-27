@@ -3149,6 +3149,14 @@ enum SelfCheck {
         report.check("sin conversación se dice «ninguna», no se deja el hueco",
                      LogValue.key(nil).text == "ninguna" && LogValue.key("").text == "ninguna")
 
+        // **Lo que NO se puede verificar acá, y por qué.** Que cada llamada use campos que su fila declara no
+        // se puede comprobar honestamente desde adentro de la app: haría falta leer el propio código fuente, y
+        // eso desde un paquete `.app` lee lo que no es (o nada, que es peor: pasaría en silencio). La forma en
+        // que se encontró esa inconsistencia fue **mirando una línea real**: el registro decía `conteo=0` donde
+        // el diseño pedía el nombre del archivo. Se corrigió la llamada, y queda dicho acá que ese control es
+        // mirar el artefacto, no una comprobación automática.
+        report.line("   (que cada llamada use los campos de su fila se revisa mirando el registro, no acá)")
+
         // Y que el registro **no tenga un campo para contenido**: la lista es cerrada y esta comprobación la
         // vigila, porque agregar un campo así sería la forma más fácil de romper la regla sin darse cuenta.
         let camposDeContenido: Set<String> = ["texto", "contenido", "mensaje", "prompt", "salida"]

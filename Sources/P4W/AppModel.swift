@@ -417,7 +417,12 @@ final class AppModel: ObservableObject {
         // referencia **ya derivada** de lo que se acaba de poner como visible.
         Log.check(ConsistencyCheck.open(reference: currentRef?.key, visible: current?.path),
                   reference: currentRef?.key, visible: current?.path, instancia: nil)
-        Log.record(.conversacionAbierta, [(.clave, .key(currentRef?.key)), (.conteo, .number(0))])
+        // El **nombre del archivo** es lo que hace útil esta línea: la huella sirve para correlacionar, y el
+        // nombre para saber de qué conversación se habla sin abrir nada.
+        Log.record(.conversacionAbierta, [
+            (.clave, .key(currentRef?.key)),
+            (.archivo, .fileName(summary.path)),
+        ])
         // Sin esto, después de crear una conversación nueva el placeholder seguía tapando todo:
         // abrir cualquier conversación parecía no cargar nada.
         isNewConversation = false
