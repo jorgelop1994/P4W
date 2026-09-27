@@ -331,6 +331,7 @@ final class AppModel: ObservableObject {
 
     func loadSessions() {
         checkDependencies()
+        checkNotificationPermission()
         // Una consulta por arranque como máximo, y solo si pasó un día desde la última: la regla vive en el
         // núcleo y se verifica ahí.
         checkForUpdates()
@@ -1013,6 +1014,49 @@ final class AppModel: ObservableObject {
     func dismissAvatarHint() {
         try? preferences?.set("true", for: .avatarHintDismissed)
         objectWillChange.send()
+    }
+
+    /// Si los avisos suenan. Encendido salvo que se apague a mano.
+    var alertsWithSound: Bool {
+        preferences?.string(.soundAlerts) != "false"
+    }
+
+    func setAlertsWithSound(_ on: Bool) {
+        try? preferences?.set(on ? "true" : "false", for: .soundAlerts)
+        objectWillChange.send()
+    }
+
+    /// macOS apagó los avisos de P4W. Se consulta al arrancar: **la app no puede volver a pedir el permiso**
+    /// —el sistema solo lo pregunta una vez—, así que lo honesto es decir dónde se enciende y llevar ahí.
+    @Published var notificationsDenied = false
+
+    func checkNotificationPermission() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let denied = settings.authorizationStatus == .denied
+            Task { @MainActor in self.notificationsDenied = denied }
+        }
+    }
+
+    /// Si ya se descartó el aviso de que los avisos están apagados.
+    var alertsHintDismissed: Bool {
+        preferences?.string(.alertsHintDismissed) == "true"
+    }
+
+    func dismissAlertsHint() {
+        try? preferences?.set("true", for: .alertsHintDismissed)
+        objectWillChange.send()
+    }
+
+    /// Abre el panel de Avisos de Ajustes del Sistema. No hay forma de volver a pedir el permiso por código.
+    func openNotificationSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// El estado de una conversación, si tiene una instancia viva. Es el **nivel 1**: existe para todas las
+    /// conversaciones vivas, tenga o no la suya en pantalla, y por eso no cuesta memoria.
+    func sessionState(_ key: String) -> InstanceState? {
+        agents.first { $0.sessionKey == key }?.state
     }
 
     /// Dónde vive el gato. Se cambia desde el menú del propio gato, sin entrar a configuración: es una
@@ -1707,7 +1751,8 @@ final class AppModel: ObservableObject {
                                                        alreadyNotified: notified.contains(mark)) {
                 notified.insert(mark)
                 Notifier.post(title: NotificationPolicy.title(for: .finished),
-                              body: describe(change.sessionKey))
+                              body: describe(change.sessionKey),
+                              sound: alertsWithSound)
             }
         }
 

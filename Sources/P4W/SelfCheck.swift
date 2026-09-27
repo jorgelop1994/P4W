@@ -77,6 +77,7 @@ enum SelfCheck {
         checkDrafts(report)
         checkMultitasking(report)
         checkSpaceMembership(report)
+        checkInProgressIndicator(report)
         if CommandLine.arguments.contains("--live") { checkLiveNaming(report) }
         if CommandLine.arguments.contains("--live") { checkLiveStream(report) }
         checkReveal(report)
@@ -3014,6 +3015,36 @@ enum SelfCheck {
         report.check("y contiene los diez PNG", FileManager.default.fileExists(
             atPath: "\(work)/icon.iconset/icon_512x512@2x.png"))
         report.line("   \(log.last ?? "")")
+    }
+
+    // MARK: 46. Dónde está trabajando Pi (Fase 13.5)
+
+    /// El indicador por conversación: qué estados merecen una marca y cuáles no.
+    ///
+    /// La decisión está en el núcleo justamente para poder verificarla acá: en la vista no se puede.
+    private static func checkInProgressIndicator(_ report: Reporter) {
+        report.section("46. Dónde está trabajando Pi (Fase 13.5)")
+
+        report.check("«trabajando» se marca", InstanceState.working.indicator == "trabajando")
+        report.check("«arrancando» también se marca (Pi ya está en eso)",
+                     InstanceState.starting.indicator == "trabajando")
+        report.check("lo que te necesita se marca distinto",
+                     InstanceState.blocked.indicator == "te necesita")
+        report.check("lo que falló se marca", InstanceState.failed.indicator == "con error")
+
+        // Lo importante: **no** marcar todo. Una marca por cada conversación viva sería ruido y taparía
+        // justamente lo que se quiere ver.
+        let enReposo = [InstanceState.idle, .cold, .reaping]
+        report.check("en reposo, apagándose o sin proceso: **ninguna** marca",
+                     enReposo.allSatisfy { $0.indicator == nil },
+                     enReposo.map { "\($0): \($0.indicator ?? "sin marca")" }.joined(separator: " · "))
+
+        // Cuatro estados dicen tres cosas: «arrancando» y «trabajando» cuentan como lo mismo, que es lo que
+        // la persona necesita saber.
+        let conMarca = InstanceState.allCases.filter { $0.indicator != nil }
+        report.check("y solo cuatro estados llevan marca, diciendo tres cosas",
+                     conMarca.count == 4 && Set(conMarca.compactMap(\.indicator)).count == 3,
+                     conMarca.map(\.indicator!).joined(separator: " · "))
     }
 
     // MARK: 45. Pertenencia a los spaces (Fase 14.4)

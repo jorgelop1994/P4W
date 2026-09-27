@@ -38,6 +38,11 @@ public final class PreferencesStore: @unchecked Sendable {
         case dockIconLive = "dock_icon_live"
         /// Avisos de dependencias que ya se descartaron (los opcionales y los recomendados).
         case dismissedDependencies = "dismissed_dependencies"
+        /// Si los avisos suenan. **Encendido por defecto**: es lo que se pidió, y el sonido va con la
+        /// notificación para que lo gobierne el sistema (modo "No molestar", ajustes de avisos).
+        case soundAlerts = "sound_alerts"
+        /// Si ya se descartó el aviso de que las notificaciones están apagadas en macOS.
+        case alertsHintDismissed = "alerts_hint_dismissed"
         /// La versión de la que ya se avisó y se descartó. Se guarda la **versión**, no un "no mostrar
         /// más", porque descartar la 0.2.0 no puede silenciar la 0.3.0.
         case dismissedUpdateVersion = "dismissed_update_version"

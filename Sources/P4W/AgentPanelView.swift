@@ -31,6 +31,21 @@ struct AgentPanelView: View {
 
                 Spacer()
 
+                // El sonido, donde viven los avisos: al lado de los agentes. Va con la notificación, así
+                // que lo gobierna el sistema —si el modo "No molestar" está puesto, no suena— y por eso acá
+                // solo se enciende o se apaga la intención.
+                Button {
+                    model.setAlertsWithSound(!model.alertsWithSound)
+                } label: {
+                    Image(systemName: model.alertsWithSound ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(model.alertsWithSound ? Palette.info(scheme) : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(model.alertsWithSound
+                      ? "Suena cuando Pi termina. Hacé clic para apagarlo."
+                      : "No suena cuando Pi termina. Hacé clic para encenderlo.")
+
                 // Filtro con la forma de `pi-agent-board`: `s:blocked`, o texto libre.
                 HStack(spacing: 4) {
                     Image(systemName: "line.3.horizontal.decrease.circle")

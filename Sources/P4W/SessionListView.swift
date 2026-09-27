@@ -510,6 +510,16 @@ struct SessionRow: View {
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var accessibility: AccessibilityObserver
 
+    /// El color de la marca: el acento para lo que está corriendo, naranja para lo que pide a la persona, y
+    /// rojo para lo que falló. Los tres casos que ya distingue el panel de agentes.
+    private func indicatorColor(_ estado: InstanceState) -> Color {
+        switch estado {
+        case .blocked: return .orange
+        case .failed: return .red
+        default: return .accentColor
+        }
+    }
+
     var body: some View {
         // Solo cuenta cuando se corre con `--measure-layout`: es la medición del efecto de plegar.
         let _ = LayoutProbe.noteRow(session.path)

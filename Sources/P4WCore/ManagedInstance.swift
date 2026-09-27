@@ -110,7 +110,7 @@ public struct ModelOption: Sendable, Identifiable, Equatable {
 
 /// Estados de una instancia. `idle` / `working` / `blocked` usan el mismo vocabulario que herdr
 /// para que el panel hable un solo idioma (§5.1 del plan).
-public enum InstanceState: String, Sendable {
+public enum InstanceState: String, Sendable, CaseIterable {
     case cold        // existe el registro, no hay proceso
     case starting    // proceso lanzado, esperando handshake
     case idle        // listo para recibir input
@@ -120,6 +120,22 @@ public enum InstanceState: String, Sendable {
     case failed      // el proceso murió o el handshake falló
 
     public var isBusy: Bool { self == .working || self == .blocked || self == .starting }
+
+    /// Lo que se muestra al lado de una conversación para saber **en cuál está trabajando Pi**, sin tener
+    /// que abrirla una por una. `nil` = no hay nada que indicar.
+    ///
+    /// Es la parte de esta decisión que se puede verificar, y por eso está acá y no en la vista: qué estados
+    /// merecen una marca y cuáles no.
+    public var indicator: String? {
+        switch self {
+        case .starting, .working: return "trabajando"
+        case .blocked: return "te necesita"
+        case .failed: return "con error"
+        // En reposo, apagándose o sin proceso no hay nada que decir: una marca por cada conversación viva
+        // sería ruido, y el objetivo es ver **dónde hay trabajo en curso**.
+        case .idle, .cold, .reaping: return nil
+        }
+    }
 }
 
 /// Por qué se liberó una instancia. Se registra para poder auditar que nunca se mató trabajo.

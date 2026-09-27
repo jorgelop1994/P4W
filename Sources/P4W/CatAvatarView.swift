@@ -212,6 +212,21 @@ struct CatAvatarView: View {
             Text(model.dockIconLive ? "✓ Gato en el Dock" : "Gato en el Dock")
         }
         Divider()
+        // El sonido vive acá —y no solo en el panel de agentes— porque **el panel se oculta cuando no hay
+        // agentes**: una preferencia que se busca una vez no puede depender de que haya algo corriendo.
+        Section("Avisos") {
+            Button {
+                model.setAlertsWithSound(!model.alertsWithSound)
+            } label: {
+                Text(model.alertsWithSound ? "✓ Suena cuando Pi termina" : "Suena cuando Pi termina")
+            }
+            // Y si macOS tiene los avisos apagados, se dice acá mismo, donde está la preferencia: no hay
+            // forma de volver a pedir el permiso por código, así que se lleva a donde se enciende.
+            if model.notificationsDenied {
+                Button("Los avisos están apagados en macOS…") { model.openNotificationSettings() }
+            }
+        }
+        Divider()
         Text("El gato muestra qué está haciendo Pi")
     }
 }

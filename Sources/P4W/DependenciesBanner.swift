@@ -17,14 +17,49 @@ struct DependenciesBanner: View {
 
     var body: some View {
         let issues = model.visibleDependencyIssues
-        if !issues.isEmpty {
-            let blocking = issues.filter { $0.level == .obligatorio }
-            if !blocking.isEmpty {
-                blockingPanel(blocking)
-            } else {
-                recommendationLine(issues)
+        VStack(spacing: 0) {
+            if !issues.isEmpty {
+                let blocking = issues.filter { $0.level == .obligatorio }
+                if !blocking.isEmpty {
+                    blockingPanel(blocking)
+                } else {
+                    recommendationLine(issues)
+                }
+            }
+            // **El permiso de avisos no se puede volver a pedir por código**: el sistema lo pregunta una sola
+            // vez. Así que si quedó apagado, lo honesto es decir dónde se enciende y llevar ahí, en vez de
+            // dejar que la persona espere un sonido que nunca va a llegar.
+            if model.notificationsDenied && !model.alertsHintDismissed {
+                alertsOffLine
             }
         }
+    }
+
+    /// Los avisos apagados en macOS. Distinto de "no hay dependencias faltantes": es un permiso del sistema.
+    private var alertsOffLine: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "bell.slash")
+                .font(.system(size: 9))
+            Text("Los avisos de macOS están apagados para P4W: no vas a escuchar cuándo termina Pi.")
+                .font(.system(size: 11))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Button("Abrir Ajustes") { model.openNotificationSettings() }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+            Button {
+                model.dismissAlertsHint()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .help("No volver a avisar sobre esto")
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 22)
+        .padding(.bottom, 6)
     }
 
     /// Lo que impide usar la app. Sin ✕ a propósito.
