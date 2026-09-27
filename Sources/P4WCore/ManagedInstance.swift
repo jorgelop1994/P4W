@@ -486,9 +486,28 @@ public final class ManagedInstance: @unchecked Sendable {
         requestCounter += 1
         let id = "p4w-\(requestCounter)"
         _lastActivity = Date()
+        // **Un prompt enviado es un run pedido: la instancia está ocupada desde acá**, no desde que Pi
+        // contesta con `agent_start`.
+        //
+        // Sin esto hay una ventana —entre escribir en `stdin` y el primer evento— en la que la instancia se
+        // ve inactiva, y entonces `isReapable` la deja pasar: cualquier camino que libere (cerrar la
+        // pestaña, el reaper por inactividad, la presión de memoria) **podía cortar un trabajo recién
+        // pedido**. Lo encontró una comprobación escrita justamente para eso.
+        _runActive = true
         lock.unlock()
-        try pi.send(RPCCommand.prompt(id: id, message: text, images: images,
-                                      streamingBehavior: streamingBehavior))
+
+        do {
+            try pi.send(RPCCommand.prompt(id: id, message: text, images: images,
+                                          streamingBehavior: streamingBehavior))
+        } catch {
+            // No se pudo enviar, así que no hay run: se vuelve atrás en vez de dejar la instancia marcada
+            // como ocupada para siempre.
+            lock.lock()
+            _runActive = false
+            lock.unlock()
+            throw error
+        }
+        transition(to: _pendingDialogs.isEmpty ? .working : .blocked)
     }
 
     public func abort() {

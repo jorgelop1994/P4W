@@ -95,6 +95,13 @@ final class AppModel: ObservableObject {
     private var supervisor: InstanceSupervisor?
     /// Los borradores, uno por conversación.
     private var draftStore: DraftStore?
+    /// De qué conversación es el transcript que está en memoria.
+    ///
+    /// Hay **un solo** transcript para la app —no tiene sentido tener 470 en memoria—, pero tiene dueño: solo
+    /// los eventos de la conversación que está en pantalla se dibujan. Lo demás vive en el nivel 1, que es el
+    /// estado del supervisor, y por eso no cuesta memoria dibujarlo.
+    private var transcriptOwner: String?
+
     /// De qué conversación es el texto que hoy está en el campo. `nil` = conversación nueva, sin archivo
     /// todavía (se guarda bajo una clave fija, así igual sobrevive).
     private var draftKey: String?
@@ -464,6 +471,15 @@ final class AppModel: ObservableObject {
                 self.sessions = loaded
                 if let match = loaded.first(where: { $0.id == wanted }) {
                     self.current = match
+                    // La conversación nueva ya tiene archivo, así que cambia su clave: el dueño del
+                    // transcript y el enganche de la instancia pasan a la ruta nueva. Sin esto, la respuesta
+                    // dejaría de dibujarse en cuanto Pi creara el archivo.
+                    self.transcriptOwner = match.path
+                    self.draftKey = match.path
+                    if let instance = self.instance {
+                        let ref = self.currentRef
+                        self.bind(instance, ref: ref, key: match.path)
+                    }
                     // Y ahora que el archivo existe, se cumple la intención del space activo.
                     if let spaceID = self.pendingSpaceID {
                         self.pendingSpaceID = nil
@@ -488,12 +504,28 @@ final class AppModel: ObservableObject {
             applyPinning()
         }
         instance.onEvent = { [weak self] event in
-            self?.transcript.apply(event)
+            guard let self else { return }
+            // **Acá estaba el bug del multitasking.** El transcript es uno solo, así que si una conversación
+            // que seguía trabajando en segundo plano aplicaba sus eventos, su razonamiento y sus herramientas
+            // se dibujaban **en la conversación que se acababa de abrir**. Ahora cada enganche sabe de qué
+            // conversación es y solo dibuja si es la que está en pantalla.
+            //
+            // Nada se pierde por no dibujarlo: el estado y los contadores de **todas** las instancias los
+            // lleva el supervisor por su cuenta, así que el panel y el indicador no dependen de tener la
+            // conversación abierta. Ese es el nivel 1.
+            if key == nil || key == self.transcriptOwner {
+                self.transcript.apply(event)
+            }
             if case .agentSettled = event {
+                // El cierre de la conversación que terminó: si es la que está en pantalla, se apaga el
+                // "enviando". Si no, la que mira sigue esperando lo suyo y no se le toca nada.
+                let esLaVisible = (key == nil || key == self.transcriptOwner)
                 Task { @MainActor in
-                    self?.isSending = false
-                    self?.locateNewConversation()
-                    self?.notifyIfNeeded()
+                    if esLaVisible {
+                        self.isSending = false
+                        self.locateNewConversation()
+                    }
+                    self.notifyIfNeeded()
                 }
             }
         }
@@ -655,7 +687,9 @@ final class AppModel: ObservableObject {
         }
         await MainActor.run {
             self.statusNote = nil
-            self.bind(revived, ref: ref, key: key)
+            // La clave del enganche es la de la conversación que se está mirando: para una que ya existe es
+            // su ruta, y para una nueva es la clave de "nueva" (la misma que usan los borradores).
+            self.bind(revived, ref: ref, key: self.draftKey)
         }
         return revived
     }
@@ -722,12 +756,13 @@ final class AppModel: ObservableObject {
     private func switchDraft(to path: String?) {
         saveDraft()
         draftKey = path ?? Self.newConversationDraftKey
+        // La misma clave identifica a la conversación que se está mirando: es la dueña del transcript.
+        transcriptOwner = draftKey
         draft = draftStore?.text(for: draftKey ?? "") ?? ""
     }
 
     /// Un cambio de lo que escribió la persona. Lo llama el campo en cada tecla.
     func draftChanged(_ text: String) {
-        FileHandle.standardError.write("DIAG draftChanged \(text.count) car · key=\(draftKey?.suffix(20) ?? "nil")\n".data(using: .utf8)!)
         guard text != draft else { return }
         draft = text
         scheduleDraftSave()
@@ -735,7 +770,6 @@ final class AppModel: ObservableObject {
 
     /// Guarda el texto que está en el campo, si cambió.
     func saveDraft() {
-        FileHandle.standardError.write("DIAG saveDraft store=\(draftStore != nil) key=\(draftKey?.suffix(20) ?? "nil") texto=\(draft.count) car\n".data(using: .utf8)!)
         guard let draftStore, let key = draftKey else { return }
         try? draftStore.set(draft, for: key)
     }

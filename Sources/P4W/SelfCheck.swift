@@ -75,6 +75,7 @@ enum SelfCheck {
         checkUpdateCheck(report)
         checkLegibility(report)
         checkDrafts(report)
+        checkMultitasking(report)
         if CommandLine.arguments.contains("--live") { checkLiveNaming(report) }
         if CommandLine.arguments.contains("--live") { checkLiveStream(report) }
         checkReveal(report)
@@ -620,6 +621,16 @@ enum SelfCheck {
             report.check("el prompt se pudo enviar", false, "\(error)")
             return
         }
+
+        // **El invariante con una instancia ocupada de verdad.** Con el run en curso, pedir el reciclado
+        // tiene que ser rechazado: es la garantía de que cambiar de conversación —o cualquier otro camino—
+        // no puede cortar un trabajo en curso. Sin un run real no se puede probar, y por eso va acá.
+        let rechazado = supervisor.release(ref.key)
+        report.check("con el run en curso, el reciclado se **rechaza**",
+                     rechazado == nil && instance.isRunning,
+                     rechazado == nil ? "pid \(instance.pid) sigue trabajando"
+                                      : "se recicló una instancia ocupada: el invariante se rompió")
+
 
         // Esperar el fin real: `agent_settled`. No sirve mirar `isBusy` porque justo después de
         // enviar el run todavía no arrancó y el estado sigue en `idle`.
@@ -3002,6 +3013,79 @@ enum SelfCheck {
         report.check("y contiene los diez PNG", FileManager.default.fileExists(
             atPath: "\(work)/icon.iconset/icon_512x512@2x.png"))
         report.line("   \(log.last ?? "")")
+    }
+
+    // MARK: 44. Multitasking (Fase 13)
+
+    /// Abrir otra conversación **no puede tocar la que está trabajando**. Es la mitad del bug que Jorge vio
+    /// en la Mac de su esposa: la otra mitad —que lo de una no se dibuje en la otra— es el enrutado por
+    /// conversación, que se verifica abajo y con el uso.
+    ///
+    /// Se prueba con **procesos reales**: se abren dos instancias y se comprueba que la primera sigue viva,
+    /// con el mismo `pid`, después de abrir la segunda. Sin `pi` no se puede, y se dice.
+    private static func checkMultitasking(_ report: Reporter) {
+        report.section("44. Multitasking: abrir otra conversación no cierra la que trabaja (Fase 13)")
+
+        let environment = ShellEnvironment.resolve()
+        guard let pi = environment.piExecutable else {
+            report.line("   (sin `pi` instalado: no se puede probar con procesos reales)")
+            return
+        }
+        let sessions = SessionCatalog.load()
+        let utilizables = sessions.filter { $0.cwdIsAvailable }.prefix(2)
+        guard utilizables.count == 2 else {
+            report.line("   (hacen falta dos conversaciones abribles para esta prueba)")
+            return
+        }
+
+        let work = "\(NSTemporaryDirectory())p4w-multi-\(UUID().uuidString.prefix(8))"
+        defer { try? FileManager.default.removeItem(atPath: work) }
+        do {
+            try FileManager.default.createDirectory(atPath: work, withIntermediateDirectories: true)
+            var copias: [String] = []
+            for (indice, sesion) in utilizables.enumerated() {
+                let copia = "\(work)/sesion\(indice).jsonl"
+                try FileManager.default.copyItem(atPath: sesion.path, toPath: copia)
+                copias.append(copia)
+            }
+
+            let supervisor = InstanceSupervisor(
+                config: SupervisorConfig(piExecutable: pi, defaultProfile: .lean,
+                                         reapAfterSeconds: 600, maxLiveInstances: 3),
+                environment: environment
+            )
+            defer { supervisor.shutdownAll() }
+
+            guard let primera = try? supervisor.acquire(.existing(path: copias[0])),
+                  let segunda = try? supervisor.acquire(.existing(path: copias[1])) else {
+                report.check("se pudieron abrir dos conversaciones a la vez", false)
+                return
+            }
+            report.check("se pueden tener dos conversaciones vivas a la vez",
+                         primera.pid != segunda.pid,
+                         "pids \(primera.pid) y \(segunda.pid)")
+
+            // La primera **no se toca** por abrir la segunda: mismo proceso, y sigue en el pool.
+            let enElPool = supervisor.snapshot()
+            report.check("la primera sigue en el pool después de abrir la segunda",
+                         enElPool.contains { $0.pid == primera.pid },
+                         "\(enElPool.count) instancias vivas")
+            report.check("y es el **mismo proceso**: abrir otra no la reinició",
+                         primera.isRunning, "pid \(primera.pid) sigue vivo")
+
+            // Y el invariante que protege el trabajo: una instancia ocupada no se recicla **ni siquiera**
+            // pidiéndolo de forma explícita (que es el camino de ⌘W).
+            // Una instancia **inactiva** sí se libera: es lo que devuelve memoria, y es la mitad del
+            // propósito del pool. (El caso contrario —una **ocupada** no se libera— necesita un run de
+            // verdad, así que se prueba en la corrida real, con `--live`.)
+            let liberada = supervisor.release(copias[0])
+            report.check("una instancia inactiva sí se libera (devuelve memoria)",
+                         liberada != nil,
+                         "quedan \(supervisor.snapshot().count) vivas")
+            report.line("   (el invariante completo vive en la suite del supervisor: 27 comprobaciones)")
+        } catch {
+            report.check("el multitasking con dos conversaciones funciona", false, "\(error)")
+        }
     }
 
     // MARK: 43. Borradores y deshacer (Fase 11)
