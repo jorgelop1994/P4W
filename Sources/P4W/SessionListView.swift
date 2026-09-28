@@ -290,6 +290,7 @@ struct SuggestionsSection: View {
                            : "Nombrar") {
                         model.nameClustersWithModel()
                     }
+                    .blancoDeClic()
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.accentColor)
@@ -366,6 +367,7 @@ struct SpacesSection: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 10, weight: .medium))
+                        .blancoDeClic()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)

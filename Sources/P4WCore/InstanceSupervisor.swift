@@ -308,6 +308,32 @@ public final class InstanceSupervisor: @unchecked Sendable {
         URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
     }
 
+    /// La clave con la que el supervisor conoce a esta instancia **ahora**.
+    ///
+    /// El supervisor es la única fuente de la identidad de una instancia. La app pregunta acá en vez de leer un
+    /// dato guardado en la instancia: dos verdades sobre lo mismo es exactamente lo que ya falló tres veces en
+    /// este proyecto, y guardarlo en la instancia obligaría a mutarlo (con su carrera) o a bloquear dos veces.
+    public func key(of instance: ManagedInstance) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return instances.first { $0.value === instance }?.key
+    }
+
+    /// Le cambia el nombre a una instancia viva, **sin tocar el proceso**.
+    ///
+    /// Pasa con una conversación nueva: nace identificada por su `uuid` —Pi todavía no escribió el archivo— y
+    /// cuando lo escribe su identidad pasa a ser la ruta. Si el supervisor la siguiera llamando por el `uuid`,
+    /// la app no la reconocería (compararía una ruta contra un uuid) y **lanzaría una segunda instancia para la
+    /// misma conversación**: dos procesos vivos para lo mismo, los dos mandando eventos.
+    @discardableResult
+    public func rekey(from vieja: String, to nueva: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard vieja != nueva, let instance = instances[vieja] else { return false }
+        instances.removeValue(forKey: vieja)
+        instances[nueva] = instance
+        Log.record(.instanciaReclavada, [(.clave, .key(nueva)), (.archivo, .fileName(nueva))])
+        return true
+    }
+
     public func liveInstance(for key: String) -> ManagedInstance? {
         lock.lock(); defer { lock.unlock() }
         return instances[key]

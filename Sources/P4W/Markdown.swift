@@ -514,9 +514,14 @@ struct CodeBlock: View {
                 } label: {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         .font(.system(size: 9))
+                        .blancoDeClic()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                // La etiqueta la ponía macOS, en inglés: decía «Copy». Acá se dice en el idioma de la app, y de
+                // paso el globo explica qué copia.
+                .help(copied ? "Copiado" : "Copiar el código")
+                .accessibilityLabel("Copiar el código")
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)

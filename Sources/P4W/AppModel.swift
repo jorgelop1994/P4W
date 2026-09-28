@@ -541,8 +541,16 @@ final class AppModel: ObservableObject {
                     }
                     self.draftKey = match.path
                     if let instance = self.instance {
-                        // El enganche cambia de clave: la conversación ya tiene archivo, y de ahí en
-                        // adelante se la identifica por su ruta.
+                        // **La identidad se asienta.** La conversación nueva se llamaba por su uuid y ahora
+                        // se llama por su ruta: hay que decírselo al supervisor, que es quien lleva esa
+                        // identidad. Sin esto, la app no reconocía su propia instancia al comparar (ruta
+                        // contra uuid) y **lanzaba una segunda instancia para la misma conversación** — dos
+                        // procesos vivos para lo mismo, los dos mandando eventos acá.
+                        if let vieja = self.supervisor?.key(of: instance) {
+                            self.supervisor?.rekey(from: vieja, to: match.path)
+                        }
+                        // Y el enganche cambia de clave, para que lo que llegue se dibuje en la conversación
+                        // correcta.
                         self.bind(instance, key: match.path)
                     }
                     // Y ahora que el archivo existe, se cumple la intención del space que tenía esa
@@ -575,10 +583,11 @@ final class AppModel: ObservableObject {
         // **La instancia que se engancha tiene que ser la de la conversación visible.** Si es la de otra
         // —aunque esté viva a propósito, por el multitasking—, sus eventos se dibujarían en la que se está
         // mirando. Eso es la mezcla de mensajes, y esto lo detecta.
+        let claveDeLaInstancia = supervisor?.key(of: instance)
         Log.check(ConsistencyCheck.bind(reference: currentRef?.key,
                                         visible: current?.path ?? key,
-                                        instancia: instance.poolKey),
-                  reference: currentRef?.key, visible: current?.path ?? key, instancia: instance.poolKey)
+                                        instancia: claveDeLaInstancia),
+                  reference: currentRef?.key, visible: current?.path ?? key, instancia: claveDeLaInstancia)
         self.instance = instance
         if let key {
             pinnedKey = key
@@ -753,7 +762,9 @@ final class AppModel: ObservableObject {
         // La instancia en mano tiene que ser la de **esta** conversación. Si se cambió de conversación, la
         // que estaba enganchada es de la otra (y sigue viva a propósito, por el multitasking): reusarla era
         // mandar el mensaje al lugar equivocado.
-        if let instance, let ref = currentRef, instance.isReusable, instance.poolKey == ref.key {
+        // La identidad la dice el **supervisor**, no un dato guardado en la instancia: es la única fuente, y
+        // preguntar evita tener dos verdades que se puedan separar.
+        if let instance, let ref = currentRef, instance.isReusable, supervisor?.key(of: instance) == ref.key {
             return instance
         }
         guard let supervisor, let ref = currentRef else {
@@ -1097,6 +1108,11 @@ final class AppModel: ObservableObject {
     @Published var notificationsDenied = false
 
     func checkNotificationPermission() {
+        // **Sin paquete de aplicación no se pregunta nada.** `UNUserNotificationCenter` exige un bundle real y
+        // tira una excepción si se lo llama desde un binario suelto: eso rompía `--measure-layout`, que es la
+        // herramienta con la que se mide el layout sin ver la pantalla. Y los permisos de avisos no significan
+        // nada en un modo de diagnóstico, así que no hay nada que consultar.
+        guard Bundle.main.bundleIdentifier != nil else { return }
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             let denied = settings.authorizationStatus == .denied
             // Es un dato que la persona podría necesitar mandar: el sonido no suena y no se sabe por qué.

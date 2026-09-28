@@ -249,3 +249,18 @@ enum Palette {
         Color(nsColor: .separatorColor).opacity(contrast ? 1 : 0.6)
     }
 }
+
+extension View {
+    /// Un blanco de clic que **de verdad** se puede pulsar.
+    ///
+    /// En SwiftUI, agrandar el marco **no** agranda la zona que responde: sin `contentShape`, el clic sigue
+    /// entrando solo donde hay dibujo y el marco queda decorativo. Y 24×24 es el mínimo de las guías de Apple.
+    ///
+    /// Medido con `scripts/measure-clickables.swift`: la app tenía **30 de 35** controles por debajo del
+    /// mínimo, el más chico de 8×8. Lo peor no es el número: es que un blanco de 8 puntos hace que la persona
+    /// falle el clic y crea que la app no responde.
+    func blancoDeClic(_ lado: CGFloat = 24) -> some View {
+        frame(minWidth: lado, minHeight: lado)
+            .contentShape(Rectangle())
+    }
+}

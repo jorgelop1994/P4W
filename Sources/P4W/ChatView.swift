@@ -115,6 +115,7 @@ struct ChatView: View {
                                     }
                                     Text(model.isLoadingOlder ? "Cargando…" : "Cargar mensajes anteriores")
                                         .font(.system(size: 11))
+                                        .blancoDeClic()
                                 }
                             }
                             .buttonStyle(.plain)
@@ -321,6 +322,7 @@ struct MessageActions: View {
                         .font(.system(size: 9))
                     Text(copied ? "copiado" : "copiar")
                         .font(.system(size: 11))
+                        .blancoDeClic()
                 }
             }
             .buttonStyle(.plain)
@@ -524,7 +526,9 @@ struct ActivityRail: View {
                     Spacer(minLength: 0)
                 }
                 .foregroundStyle(.secondary)
-                .contentShape(Rectangle())
+                // Todo el renglón es el botón: abrir y cerrar el detalle es lo que más se pulsa en una
+                // conversación larga. Antes medía 599×14 — se acertaba por suerte.
+                .blancoDeClic()
             }
             .buttonStyle(.plain)
 

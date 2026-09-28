@@ -27,11 +27,12 @@ struct CollapseChevron: View {
                 model.toggleSection(sectionKey)
             }
         } label: {
+            // El dibujo sigue siendo chico —la columna tiene que seguir siendo densa— pero el **blanco de
+            // clic** cumple el mínimo. Antes era de 10×5: el peor de la app.
             Image(systemName: collapsed ? "chevron.right" : "chevron.down")
                 .font(.system(size: 8, weight: .bold))
                 .foregroundStyle(.secondary)
-                .frame(width: 10)
-                .contentShape(Rectangle())
+                .blancoDeClic()
         }
         .buttonStyle(.plain)
         // Un triángulo dibujado no alcanza: el estado tiene que poder leerse sin verlo.

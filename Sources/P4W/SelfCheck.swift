@@ -81,6 +81,7 @@ enum SelfCheck {
         checkLogPolicy(report)
         checkConsistency(report)
         checkLogDump(report)
+        checkRekey(report)
         if CommandLine.arguments.contains("--live") { checkLiveNaming(report) }
         if CommandLine.arguments.contains("--live") { checkLiveStream(report) }
         checkReveal(report)
@@ -440,7 +441,7 @@ enum SelfCheck {
                      pinned.isRunning && pinned.isReusable,
                      "anclada \(pinned.isRunning ? "viva" : "muerta") · otra \(other.isRunning ? "viva" : "reciclada")")
         report.check("con el tope excedido se recicla la NO anclada",
-                     !supervisor.allInstances().contains { $0.poolKey == copies[1] })
+                     !supervisor.allInstances().contains { supervisor.key(of: $0) == copies[1] })
 
         // 2. Reciclado agresivo por inactividad: la anclada sigue intocable.
         let aggressive = supervisor.reapIdle(now: Date(), threshold: 0)
@@ -3086,6 +3087,66 @@ enum SelfCheck {
         } catch {
             report.check("el diagnóstico se escribe y se lee", false, "\(error)")
         }
+    }
+
+    // MARK: 50. El re-keyeo de una conversación nueva
+
+    /// Una conversación nueva nace identificada por su `uuid` y, cuando Pi le escribe el archivo, su identidad
+    /// pasa a ser la ruta. Si el supervisor no se enterara, la app no reconocería su propia instancia y
+    /// **lanzaría una segunda para la misma conversación**: dos procesos vivos para lo mismo.
+    ///
+    /// Se prueba con un proceso real, que es la única forma de saber que de verdad no se lanza otro.
+    private static func checkRekey(_ report: Reporter) {
+        report.section("50. El re-keyeo: una conversación nueva deja de llamarse por su uuid")
+
+        let environment = ShellEnvironment.resolve()
+        guard let pi = environment.piExecutable else {
+            report.line("   (sin `pi` instalado: no se puede probar con un proceso real)")
+            return
+        }
+        let supervisor = InstanceSupervisor(
+            config: SupervisorConfig(piExecutable: pi, defaultProfile: .lean,
+                                     reapAfterSeconds: 600, maxLiveInstances: 2),
+            environment: environment
+        )
+        defer { supervisor.shutdownAll() }
+
+        let uuid = UUID().uuidString
+        let recienNacida = SessionRef.new(id: uuid, directory: nil)
+        guard let instance = try? supervisor.acquire(recienNacida, profile: .lean) else {
+            report.check("una conversación nueva se puede abrir", false, "no se pudo abrir")
+            return
+        }
+        report.check("una conversación nueva se conoce por su uuid",
+                     supervisor.key(of: instance) == recienNacida.key,
+                     supervisor.key(of: instance) ?? "—")
+
+        // Pi escribe el archivo: la identidad se asienta en la ruta.
+        let ruta = "\(NSTemporaryDirectory())p4w-rekey-\(uuid).jsonl"
+        let cambio = supervisor.rekey(from: recienNacida.key, to: ruta)
+        report.check("el re-keyeo se hace", cambio)
+        report.check("y pasa a conocérsela por su ruta", supervisor.key(of: instance) == ruta,
+                     supervisor.key(of: instance) ?? "—")
+        report.check("es **la misma** instancia, no otra", supervisor.liveInstance(for: ruta) === instance)
+        report.check("el nombre viejo ya no existe", supervisor.liveInstance(for: recienNacida.key) == nil)
+        report.check("y el panorama la reporta con el nombre nuevo",
+                     supervisor.snapshot().contains { $0.sessionKey == ruta },
+                     supervisor.snapshot().map(\.sessionKey).joined(separator: " · "))
+
+        // **Lo que importa de verdad:** pedirla otra vez —que es lo que hace la app al mandar el segundo
+        // mensaje— tiene que devolver **la misma instancia**, sin lanzar un segundo proceso para la misma
+        // conversación. Antes del re-keyeo esto lanzaba otro: dos procesos, los dos mandando eventos.
+        let deNuevo = try? supervisor.acquire(.existing(path: ruta), profile: .lean)
+        report.check("pedirla de nuevo devuelve la misma y **no lanza otra**",
+                     deNuevo === instance)
+        report.check("y sigue viva", instance.isRunning && instance.isReusable)
+
+        // Un re-keyeo pedido al revés no puede romper nada.
+        report.check("re-keyear desde un nombre que no existe no hace nada",
+                     supervisor.rekey(from: "no-existe", to: "tampoco") == false)
+        report.check("y re-keyear al mismo nombre tampoco",
+                     supervisor.rekey(from: ruta, to: ruta) == false
+                        && supervisor.key(of: instance) == ruta)
     }
 
     // MARK: 47. El registro: la tabla y el redactor (Fase 15.1)

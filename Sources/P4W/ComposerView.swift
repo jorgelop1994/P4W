@@ -89,6 +89,7 @@ struct ComposerView: View {
                 pickFiles()
             } label: {
                     Image(systemName: "paperclip")
+                        .blancoDeClic()
                         .font(.system(size: 13))
                 }
                 .buttonStyle(.plain)
@@ -121,6 +122,7 @@ struct ComposerView: View {
                         model.send()
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
+                            .blancoDeClic()
                             .font(.system(size: 16))
                     }
                     .buttonStyle(.plain)

@@ -166,8 +166,10 @@ struct ProfilePicker: View {
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
             }
+
         }
         .menuStyle(.borderlessButton)
+        .blancoDeClic()
         .fixedSize()
         .help("Perfil de arranque de Pi. Cambiarlo reinicia el proceso y conserva la conversación.")
     }
@@ -239,9 +241,13 @@ struct ModelPicker: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: 170, alignment: .leading)
+            // El marco del label es también el blanco de clic: sin altura mínima, los tres menús del
+            // encabezado medían 14-17 puntos de alto y se erraban.
+            .frame(maxWidth: 170, minHeight: 24, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
+        .blancoDeClic()
         .fixedSize()
         .id(model.currentModel?.key ?? "sin-modelo")
         .help("Modelo de esta conversación, elegido de la lista de Pi.")
@@ -278,7 +284,10 @@ struct ThinkingPicker: View {
             }
         }
         .menuStyle(.borderlessButton)
-        .fixedSize()
+        // **Probado, no supuesto:** con `.fixedSize()` el menú se queda con el tamaño ideal del texto y mide
+        // 15 puntos de alto, aunque el marco se ponga en el label. Sacándolo y aplicando el blanco al botón
+        // del menú, la accesibilidad reporta la altura real.
+        .blancoDeClic()
         .id(model.currentThinkingLevel ?? "sin-nivel")
         .help("Nivel de razonamiento del modelo activo. No se inventan opciones.")
     }

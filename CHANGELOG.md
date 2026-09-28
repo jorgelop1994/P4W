@@ -31,6 +31,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The version now lives in **one place** (`P4WVersion.current`); the build script reads it from there instead
   of keeping its own copy in the `Info.plist` template.
 
+### Changed
+- **Bigger click targets.** Measured with a script in the repository, 30 of 35 controls were below the 24×24
+  minimum — the smallest a chevron of 8×8 points — which makes people miss the click and conclude the app is not
+  responding. Every control the app owns now meets the minimum, at a cost of about 10 points per row where they
+  grew.
+
 ### Fixed
 - **The notarization order.** The app's ticket was being stapled *before* notarizing it, when the ticket does
   not exist yet, and the failure was swallowed by a `|| true`. The app shipped without its own ticket, which

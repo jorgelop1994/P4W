@@ -113,6 +113,7 @@ public enum LogEvent: String, Sendable, CaseIterable {
     case instanciaAdquirida = "supervisor.adquirida"
     case instanciaLiberada = "supervisor.liberada"
     case instanciaReciclada = "supervisor.reciclada"
+    case instanciaReclavada = "supervisor.reclavada"
     case instanciaRechazada = "supervisor.rechazada"
     case instanciaNoDisponible = "supervisor.no_disponible"
 
@@ -196,6 +197,9 @@ public enum LogPolicy {
         .permisoAvisos: .init(level: .notice, category: .ciclo, fields: [.permiso]),
         .permisoGrabacion: .init(level: .notice, category: .ciclo, fields: [.permiso]),
         .instanciaReciclada: .init(level: .notice, category: .supervisor, fields: [.clave, .motivo]),
+        // El cambio de identidad de una conversación nueva cuando Pi le escribe el archivo: es un hito del
+        // recorrido, y sin él la app no reconocía su propia instancia.
+        .instanciaReclavada: .init(level: .notice, category: .supervisor, fields: [.clave, .archivo]),
         .conversacionAbierta: .init(level: .notice, category: .conversacion, fields: [.clave, .archivo]),
         .conversacionNueva: .init(level: .notice, category: .conversacion, fields: [.clave]),
         .envioPedido: .init(level: .notice, category: .envio, fields: [.clave, .largo]),
