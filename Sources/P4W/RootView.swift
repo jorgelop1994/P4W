@@ -171,7 +171,7 @@ struct ProfilePicker: View {
         .menuStyle(.borderlessButton)
         .blancoDeClic()
         .fixedSize()
-        .help("Perfil de arranque de Pi. Cambiarlo reinicia el proceso y conserva la conversación.")
+        .help("Cómo se arranca Pi en cada conversación. Cambiarlo reinicia el proceso y conserva la conversación.\n\nPerfil de Pi: \(model.selectedProfile.name)")
     }
 }
 
@@ -188,7 +188,7 @@ struct ModelPicker: View {
     @EnvironmentObject private var model: AppModel
 
     private var label: String {
-        if model.models.isEmpty { return "sin modelos" }
+        if model.models.isEmpty { return "elegir modelo" }
         return model.currentModel?.shortLabel ?? "modelo"
     }
 

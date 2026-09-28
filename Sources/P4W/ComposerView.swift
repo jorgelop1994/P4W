@@ -90,6 +90,9 @@ struct ComposerView: View {
             } label: {
                     Image(systemName: "paperclip")
                         .blancoDeClic()
+                        // La etiqueta la ponía macOS, del nombre del símbolo: decía «Attachments», en inglés.
+                        .help("Adjuntar archivos. Se pasan por su ruta, no copiando el contenido.")
+                        .accessibilityLabel("Adjuntar archivos")
                         .font(.system(size: 13))
                 }
                 .buttonStyle(.plain)

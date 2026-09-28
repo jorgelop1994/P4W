@@ -27,7 +27,8 @@ public struct ProfileSpec: Sendable, Equatable {
     /// memoria y de arranque), pero **las rutas `-e` explícitas siguen cargando**. Así se puede tener
     /// un perfil de 122 MB que igual conserve el caché de prefijo —que es lo que hace que la entrada se
     /// pague cacheada en vez de completa (hasta 98 % más barata en DeepSeek)— y la navegación web.
-    public static func lean(with extensions: [PiExtension], name: String, label: String) -> ProfileSpec {
+    public static func lean(with extensions: [PiExtension], name: String, label: String,
+                            note: String? = nil) -> ProfileSpec {
         var arguments = lean.arguments
         for entry in extensions {
             for point in entry.entryPoints {
@@ -38,7 +39,7 @@ public struct ProfileSpec: Sendable, Equatable {
         return ProfileSpec(
             name: name,
             arguments: arguments,
-            note: "Liviano, con \(included). El caché de prefijo abarata la entrada.",
+            note: note ?? "Lo mismo que Liviano, con \(included).",
             label: label
         )
     }
@@ -47,21 +48,24 @@ public struct ProfileSpec: Sendable, Equatable {
     public static let lean = ProfileSpec(
         name: "lean",
         arguments: ["--no-extensions", "--no-skills", "--no-prompt-templates"],
-        note: "Sin extensiones ni skills. El más liviano y el que despierta más rápido."
+        note: "Sin tus extensiones. Es el que arranca más rápido y el que menos memoria usa.",
+        label: "Liviano"
     )
 
     /// Todo lo que la máquina tenga configurado. Medido: 325 MB de footprint, 5.4 s de arranque.
     public static let full = ProfileSpec(
         name: "full",
         arguments: [],
-        note: "Todo lo configurado en Pi, tal como lo usa la TUI."
+        note: "Todo lo que tenés configurado en Pi, sin sacarle nada.",
+        label: "Completo"
     )
 
     /// Conserva extensiones y skills, apaga los subsistemas que arrancan procesos hijos.
     public static let capabilities = ProfileSpec(
         name: "capabilities",
         arguments: ["--no-lens", "--no-lsp", "--no-tests", "--no-opengrep", "--no-autofix"],
-        note: "Capacidades sin diagnósticos de código."
+        note: "Con tus extensiones, pero sin lo que revisa y analiza el código. Ni lo más rápido ni lo más completo.",
+        label: "Intermedio"
     )
 
     public static let builtIn: [ProfileSpec] = [.lean, .capabilities, .full]

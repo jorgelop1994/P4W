@@ -37,6 +37,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   responding. Every control the app owns now meets the minimum, at a cost of about 10 points per row where they
   grew.
 
+- **Plain Spanish in the labels people read.** The app's own strings were already in Spanish; what was left was
+  jargon (`lean + caché + web` for a profile) and labels macOS derives from symbol names, which showed up in
+  English (`Attachments`). Profiles are now named by what someone notices — start-up, memory, whether it can
+  search the web — with the technical name kept in the tooltip where it is actually useful.
+  An audit script in the repository lists everything the app says, and says plainly that it cannot tell app
+  labels from conversation content.
+
 ### Fixed
 - **The notarization order.** The app's ticket was being stapled *before* notarizing it, when the ticket does
   not exist yet, and the failure was swallowed by a `|| true`. The app shipped without its own ticket, which

@@ -175,14 +175,23 @@ final class AppModel: ObservableObject {
         let cache = catalog.first { $0.name.contains("deepseek-cache") }
         let web = catalog.first { $0.name.contains("web-access") }
 
+        // **Las etiquetas dicen lo que la persona recibe, no cómo se llama el modo por dentro.** El nombre
+        // técnico (`lean-cache`) queda en el globo de ayuda, donde sirve: quien lo busca, lo busca ahí.
+        //
+        // Se nombran por lo que se nota al usarlos —arranque, memoria, y si puede buscar en la web— y no por
+        // las banderas que llevan, que es información del programa, no de quien lo usa.
         if let cache {
-            built.append(.lean(with: [cache], name: "lean-cache", label: "lean + caché"))
+            built.append(.lean(with: [cache], name: "lean-cache",
+                               label: "Liviano, con memoria",
+                               note: "Lo mismo que Liviano, y recuerda lo ya leído para no pagarlo dos veces."))
         }
         if let cache, let web {
             built.append(.lean(with: [cache, web],
-                               name: "lean-cache-web", label: "lean + caché + web"))
+                               name: "lean-cache-web", label: "Liviano, con memoria y web",
+                               note: "Lo anterior, y además puede buscar en internet."))
         } else if let web {
-            built.append(.lean(with: [web], name: "lean-web", label: "lean + web"))
+            built.append(.lean(with: [web], name: "lean-web", label: "Liviano, con web",
+                               note: "Lo mismo que Liviano, y además puede buscar en internet."))
         }
         built.append(.capabilities)
         built.append(.full)
