@@ -1102,6 +1102,21 @@ final class AppModel: ObservableObject {
         objectWillChange.send()
     }
 
+    /// Cuánta app se ve. Ausente en las preferencias = **completa**, que es como venía: una preferencia nueva
+    /// no puede cambiarle la pantalla a nadie sin que la pida.
+    var interfaceMode: InterfaceMode {
+        InterfaceMode(rawValue: preferences?.string(.interfaceMode) ?? "") ?? .completa
+    }
+
+    func setInterfaceMode(_ mode: InterfaceMode) {
+        try? preferences?.set(mode.rawValue, for: .interfaceMode)
+        Log.record(.modoDeInterfaz, [(.tipo, .word(mode.rawValue))])
+        // Con el modo simple no hay panel de agentes: se apaga la intención para que no reaparezca si vuelve
+        // a la vista completa con agentes vivos.
+        if !mode.showsAgentPanel { showAgentPanel = false }
+        objectWillChange.send()
+    }
+
     /// Si los avisos suenan. Encendido salvo que se apague a mano.
     var alertsWithSound: Bool {
         preferences?.string(.soundAlerts) != "false"

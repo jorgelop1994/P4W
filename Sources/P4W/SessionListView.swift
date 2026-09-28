@@ -70,24 +70,37 @@ struct SessionListView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        SuggestionsSection()
-                        SpacesSection()
+                        // Modo simple: nada de sugerencias ni de spaces. Lo que esté en un space **no se
+                        // pierde**: la lista de abajo muestra todas las conversaciones.
+                        if model.interfaceMode.showsSuggestions { SuggestionsSection() }
+                        if model.interfaceMode.showsSpaces { SpacesSection() }
 
                         // El historial: el encabezado se pliega entero, y cada grupo por proyecto
                         // también. Con 476 conversaciones en ~15 proyectos, el grupo es lo que más se usa.
-                        HStack(spacing: 4) {
-                            SectionTitle(sectionKey: SidebarSection.historial,
-                                         title: "SIN SPACE",
-                                         count: model.sessionsOutsideSpaces.count)
-                            Spacer(minLength: 0)
+                        if model.interfaceMode.showsSectionHeaders {
+                            HStack(spacing: 4) {
+                                SectionTitle(sectionKey: SidebarSection.historial,
+                                             title: "SIN SPACE",
+                                             count: model.sessionsOutsideSpaces.count)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.top, 14)
+                            .padding(.bottom, 2)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.top, 14)
-                        .padding(.bottom, 2)
 
                         let _ = LayoutProbe.noteHistory(
                             built: !model.isCollapsed(SidebarSection.historial))
-                        if !model.isCollapsed(SidebarSection.historial) {
+                        if !model.interfaceMode.groupsByProject {
+                            // **La lista del modo simple.** Todas las conversaciones por fecha, incluidas las
+                            // que están en un space: esconder los spaces no puede esconder una conversación.
+                            ForEach(model.sessions) { session in
+                                SessionRow(session: session,
+                                           selected: session.path == model.current?.path)
+                                .onTapGesture { model.open(session) }
+                                .contextMenu { SessionActions(session: session) }
+                            }
+                        } else if !model.isCollapsed(SidebarSection.historial) {
                             ForEach(groupedByProject, id: \.project) { group in
                                 HStack(spacing: 4) {
                                     // El grupo se identifica por su **nombre**, no por su posición: si se

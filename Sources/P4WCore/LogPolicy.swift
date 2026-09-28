@@ -108,6 +108,7 @@ public enum LogEvent: String, Sendable, CaseIterable {
     case dependencias = "ciclo.dependencias"
     case permisoAvisos = "ciclo.permiso_avisos"
     case permisoGrabacion = "ciclo.permiso_grabacion"
+    case modoDeInterfaz = "ciclo.modo"
 
     // Supervisor
     case instanciaAdquirida = "supervisor.adquirida"
@@ -195,6 +196,9 @@ public enum LogPolicy {
         .appCerro: .init(level: .notice, category: .ciclo, fields: [.motivo]),
         .dependencias: .init(level: .notice, category: .ciclo, fields: [.conteo, .motivo]),
         .permisoAvisos: .init(level: .notice, category: .ciclo, fields: [.permiso]),
+        // Cuánta app se ve. Es un hito que conviene poder leer después: explica por qué la pantalla se ve
+        // como se ve cuando alguien manda un diagnóstico.
+        .modoDeInterfaz: .init(level: .notice, category: .ciclo, fields: [.tipo]),
         .permisoGrabacion: .init(level: .notice, category: .ciclo, fields: [.permiso]),
         .instanciaReciclada: .init(level: .notice, category: .supervisor, fields: [.clave, .motivo]),
         // El cambio de identidad de una conversación nueva cuando Pi le escribe el archivo: es un hito del

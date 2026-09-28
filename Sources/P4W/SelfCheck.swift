@@ -82,6 +82,7 @@ enum SelfCheck {
         checkConsistency(report)
         checkLogDump(report)
         checkRekey(report)
+        checkInterfaceMode(report)
         if CommandLine.arguments.contains("--live") { checkLiveNaming(report) }
         if CommandLine.arguments.contains("--live") { checkLiveStream(report) }
         checkReveal(report)
@@ -3087,6 +3088,45 @@ enum SelfCheck {
         } catch {
             report.check("el diagnóstico se escribe y se lee", false, "\(error)")
         }
+    }
+
+    // MARK: 51. Cuánta app se ve (Fase 10.5)
+
+    /// El modo simple: que esconda lo que dice que esconde, y —lo más importante— que **no esconda nada más**.
+    private static func checkInterfaceMode(_ report: Reporter) {
+        report.section("51. Cuánta app se ve: el modo simple esconde, no reemplaza (Fase 10.5)")
+
+        let completa = InterfaceMode.completa
+        let simple = InterfaceMode.simple
+
+        report.check("el modo simple oculta el panel de agentes", !simple.showsAgentPanel && completa.showsAgentPanel)
+        report.check("y los spaces, las sugerencias y los selectores del encabezado",
+                     !simple.showsSpaces && !simple.showsSuggestions && !simple.showsModelControls)
+        report.check("y la agrupación por proyecto, que en simple es una lista sola",
+                     !simple.groupsByProject && completa.groupsByProject)
+
+        // **La propiedad que importa**: simple es un **subconjunto**. Nada aparece en simple que no esté en
+        // completa, así que no hay una segunda app escondida que nadie revisó.
+        let sobrantes = simple.visibleSurfaces.filter { !completa.visibleSurfaces.contains($0) }
+        report.check("nada se ve en simple que no se vea en completa",
+                     sobrantes.isEmpty, sobrantes.joined(separator: " · "))
+
+        report.check("y simple muestra menos superficies",
+                     simple.visibleSurfaces.count < completa.visibleSurfaces.count,
+                     "simple \(simple.visibleSurfaces.count) · completa \(completa.visibleSurfaces.count)")
+
+        // Lo que **no** se puede perder: conversar. Está dicho en la lista de superficies, no en la vista.
+        let paraConversar = ["chat", "barra de escritura", "lista de conversaciones", "nueva conversación"]
+        let falta = paraConversar.filter { !simple.visibleSurfaces.contains($0) }
+        report.check("y lo que hace falta para conversar sigue estando",
+                     falta.isEmpty, falta.joined(separator: " · "))
+
+        // Lo que esconde, dicho: es lo que la persona necesita saber antes de encenderlo.
+        report.check("lo que esconde está enumerado, no implícito",
+                     simple.hiddenRespectToComplete.count >= 5,
+                     simple.hiddenRespectToComplete.joined(separator: " · "))
+        report.check("la opción ausente en las preferencias es la vista completa",
+                     InterfaceMode(rawValue: "") == nil && InterfaceMode.completa.visibleSurfaces.count > 5)
     }
 
     // MARK: 50. El re-keyeo de una conversación nueva

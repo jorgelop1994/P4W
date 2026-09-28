@@ -38,6 +38,8 @@ public final class PreferencesStore: @unchecked Sendable {
         case dockIconLive = "dock_icon_live"
         /// Avisos de dependencias que ya se descartaron (los opcionales y los recomendados).
         case dismissedDependencies = "dismissed_dependencies"
+        /// Cuánta app se ve: `completa` o `simple`. Ausente = completa, que es como estaba.
+        case interfaceMode = "interface_mode"
         /// Si los avisos suenan. **Encendido por defecto**: es lo que se pidió, y el sonido va con la
         /// notificación para que lo gobierne el sistema (modo "No molestar", ajustes de avisos).
         case soundAlerts = "sound_alerts"

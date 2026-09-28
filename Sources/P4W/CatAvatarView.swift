@@ -227,6 +227,19 @@ struct CatAvatarView: View {
             }
         }
         Divider()
+        // La preferencia que hace la app usable para quien solo quiere conversar. Va acá por lo mismo que el
+        // sonido: es la superficie de preferencias de P4W y está siempre.
+        Section("Cuánta app se ve") {
+            ForEach(InterfaceMode.allCases, id: \.self) { modo in
+                Button {
+                    model.setInterfaceMode(modo)
+                } label: {
+                    Text(modo == model.interfaceMode ? "✓ \(modo.label)" : modo.label)
+                }
+                .help(modo.note)
+            }
+        }
+        Divider()
         Button {
             model.saveDiagnostics()
         } label: {

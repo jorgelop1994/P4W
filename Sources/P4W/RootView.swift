@@ -53,6 +53,9 @@ struct RootView: View {
                 .frame(maxWidth: 420)
             }
             ToolbarItemGroup(placement: .primaryAction) {
+                // **Modo simple**: el encabezado se queda con el título y nada más. Configuración de Pi, los
+                // tres selectores y el panel son herramientas de quien lo configuró, no de quien conversa.
+                if model.interfaceMode.showsModelControls {
                 Button {
                     model.loadSettings()
                     showSettings = true
@@ -73,6 +76,7 @@ struct RootView: View {
                         .foregroundStyle(model.showAgentPanel ? Color.accentColor : Color.primary)
                 }
                 .help("Panel de agentes")
+                }
             }
         }
         .sheet(isPresented: $showSettings) {
@@ -110,7 +114,7 @@ struct RootView: View {
                 SetupBanner(message: error)
             }
             HSplitLayout
-            if model.showAgentPanel && !model.agents.isEmpty {
+            if model.interfaceMode.showsAgentPanel && model.showAgentPanel && !model.agents.isEmpty {
                 Divider().opacity(0.4)
                 AgentPanelView()
                     .frame(height: 132)
